@@ -5,6 +5,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import type { TranscriptionEvent } from "@/lib/oab-eval/transcription-queue";
+import { useLeadOperationStatus } from "./useLeadOperationStatus";
 
 export interface TranscriptionStatus {
 	leadID: string;
@@ -37,6 +38,11 @@ export function useTranscriptionProgress({
 	});
 
 	const [history, setHistory] = useState<TranscriptionEvent[]>([]);
+	const { operation } = useLeadOperationStatus({
+		leadId: leadID,
+		stage: "transcription",
+		enabled: enabled && !!leadID,
+	});
 
 	const handleSSEMessage = useCallback(
 		(event: MessageEvent) => {
@@ -149,43 +155,82 @@ export function useTranscriptionProgress({
 			} as MessageEvent);
 		};
 
-		const handleConnectionStatus = async (event: Event) => {
-			const customEvent = event as CustomEvent<{ status?: string }>;
-			if (customEvent.detail?.status !== "disconnected") {
-				return;
-			}
-
-			try {
-				const response = await fetch(`/api/admin/leads-chatwit/operations/status?leadId=${encodeURIComponent(leadID)}&stage=transcription`);
-				if (!response.ok) return;
-				const operation = await response.json();
-				if (operation.status === "completed") {
-					setStatus({
-						leadID,
-						status: "completed",
-						percentage: 100,
-					});
-				} else if (operation.status === "failed" || operation.status === "inconsistent") {
-					setStatus({
-						leadID,
-						status: "failed",
-						error: operation.error || operation.message || "Falha ao consultar status da transcrição.",
-					});
-				}
-			} catch (error) {
-				console.error("[useTranscriptionProgress] ❌ Erro ao consultar status:", error);
-			}
-		};
-
 		window.addEventListener("lead-notification", handleLeadNotification as EventListener);
-		window.addEventListener("lead-operations-connection", handleConnectionStatus as EventListener);
 
 		return () => {
 			console.log("[useTranscriptionProgress] 🔌 Removendo listeners centralizados");
 			window.removeEventListener("lead-notification", handleLeadNotification as EventListener);
-			window.removeEventListener("lead-operations-connection", handleConnectionStatus as EventListener);
 		};
 	}, [leadID, enabled, handleSSEMessage]);
+
+	useEffect(() => {
+		if (!operation) {
+			return;
+		}
+
+		if (operation.status === "queued") {
+			setStatus((prev) => ({
+				...prev,
+				leadID,
+				status: "queued",
+				position:
+					typeof operation.progress === "object" && operation.progress && "position" in operation.progress
+						? Number((operation.progress as { position?: number }).position)
+						: prev.position,
+			}));
+			return;
+		}
+
+		if (operation.status === "processing" && typeof operation.progress === "object" && operation.progress) {
+			const progress = operation.progress as {
+				currentPage?: number;
+				totalPages?: number;
+				percentage?: number;
+				estimatedTimeRemaining?: number;
+			};
+
+			setStatus((prev) => ({
+				...prev,
+				leadID,
+				status: "processing",
+				currentPage: progress.currentPage ?? prev.currentPage,
+				totalPages: progress.totalPages ?? prev.totalPages,
+				percentage: progress.percentage ?? prev.percentage ?? 0,
+				estimatedTimeRemaining: progress.estimatedTimeRemaining ?? prev.estimatedTimeRemaining,
+			}));
+			return;
+		}
+
+		if (operation.status === "completed") {
+			setStatus({
+				leadID,
+				status: "completed",
+				percentage: 100,
+			});
+			return;
+		}
+
+		if (
+			operation.status === "failed" ||
+			operation.status === "canceled" ||
+			operation.status === "inconsistent"
+		) {
+			const errorMessage =
+				operation.error ||
+				operation.message ||
+				(operation.status === "canceled"
+					? "A transcrição foi cancelada."
+					: "Falha ao consultar status da transcrição.");
+
+			setStatus({
+				leadID,
+				status: "failed",
+				error: errorMessage,
+			});
+
+			onError?.(errorMessage);
+		}
+	}, [leadID, onError, operation]);
 
 	const reset = useCallback(() => {
 		setStatus({

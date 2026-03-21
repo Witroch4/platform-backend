@@ -28,7 +28,7 @@ const scheduleQueues: Queue[] = []; // Queues used for recurring schedules
 
 async function recoverStalledAnalysisLeads(): Promise<void> {
 	const prisma = getPrismaInstance();
-	const queuedJobs = await analysisQueue.getJobs(["active", "waiting", "delayed"]);
+	const queuedJobs = await analysisQueue.getJobs(["active", "waiting", "delayed", "prioritized", "waiting-children"]);
 	const leadIdsWithJobs = new Set(queuedJobs.map((job) => job.data.leadId));
 	const awaitingLeads = await prisma.leadOabData.findMany({
 		where: { aguardandoAnalise: true },

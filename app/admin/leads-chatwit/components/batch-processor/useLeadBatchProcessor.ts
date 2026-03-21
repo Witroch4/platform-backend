@@ -1,12 +1,14 @@
 // app/admin/leads-chatwit/components/batch-processor/useLeadBatchProcessor.ts
 
 import { useState, useEffect, useMemo } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { ExtendedLead } from "../../types";
 import { TurboModePDFProcessor } from "./TurboModePDFProcessor";
 import { TurboModeImageGenerator } from "./TurboModeImageGenerator";
 import type { ParallelProcessingResult } from "./TurboModePDFProcessor";
 import type { TurboModeConfig, TurboModeMetrics } from "./useTurboMode";
+import { fetchLeadChatwitDetail, leadChatwitDetailQueryKey } from "../../hooks/useLeadOperationStatus";
 
 // Defina os tipos para os dados que você coletará nos diálogos
 type ManuscritoData = { selectedImages: string[] };
@@ -79,6 +81,7 @@ export const useLeadBatchProcessor = (
 	onTurboModeMetricsUpdate?: (metrics: Partial<TurboModeMetrics>) => void,
 ) => {
 	console.log("[useLeadBatchProcessor] Inicializando hook com leads:", leads.length);
+	const queryClient = useQueryClient();
 
 	const [isOpen, setIsOpen] = useState(false);
 	const [currentStep, setCurrentStep] = useState<ProcessingStep>("idle");
@@ -408,15 +411,52 @@ export const useLeadBatchProcessor = (
 			}
 		};
 
+		const handleConnectionStatus = (event: Event) => {
+			const customEvent = event as CustomEvent<{ status?: string }>;
+			if (customEvent.detail?.status !== "disconnected" || leadsBeingProcessed.size === 0) {
+				return;
+			}
+
+			void Promise.all(
+				Array.from(leadsBeingProcessed).map(async (leadId) => {
+					try {
+						const freshLead = await queryClient.fetchQuery({
+							queryKey: leadChatwitDetailQueryKey(leadId),
+							queryFn: () => fetchLeadChatwitDetail(leadId),
+							staleTime: 0,
+						});
+
+						if (
+							freshLead.manuscritoProcessado && !freshLead.aguardandoManuscrito ||
+							freshLead.espelhoProcessado && !freshLead.aguardandoEspelho ||
+							freshLead.analiseProcessada && !freshLead.aguardandoAnalise
+						) {
+							handleSSELeadUpdate(leadId, { leadData: freshLead });
+							return;
+						}
+
+						if (!freshLead.aguardandoManuscrito && !freshLead.aguardandoEspelho && !freshLead.aguardandoAnalise) {
+							removeLeadFromTracking(leadId);
+							onUpdate?.();
+						}
+					} catch (error) {
+						console.error(`[Batch SSE] ❌ Falha ao reconciliar lead ${leadId} após desconexão:`, error);
+					}
+				}),
+			);
+		};
+
 		window.addEventListener("lead-update", handleLeadUpdateEvent as EventListener);
 		window.addEventListener("lead-operation", handleLeadOperationEvent as EventListener);
+		window.addEventListener("lead-operations-connection", handleConnectionStatus as EventListener);
 
 		return () => {
 			window.removeEventListener("lead-update", handleLeadUpdateEvent as EventListener);
 			window.removeEventListener("lead-operation", handleLeadOperationEvent as EventListener);
+			window.removeEventListener("lead-operations-connection", handleConnectionStatus as EventListener);
 			closeAllSSEConnections();
 		};
-	}, [leadsBeingProcessed, onUpdate]);
+	}, [leadsBeingProcessed, onUpdate, queryClient]);
 
 	const start = () => {
 		console.log("[useLeadBatchProcessor] Função start() chamada");

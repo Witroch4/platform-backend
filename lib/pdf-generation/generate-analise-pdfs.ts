@@ -27,8 +27,7 @@ const COLOR_BORDER = rgb(0.872, 0.835, 0.772);
 const COLOR_SOFT_RED = rgb(0.973, 0.936, 0.932);
 const COLOR_SOFT_GOLD = rgb(0.979, 0.957, 0.89);
 const COLOR_MUTED = rgb(0.36, 0.34, 0.34);
-const CLIENT_PDF_TITLE_LIMIT = 10;
-const CLIENT_PDF_DESCRIPTION_LIMIT = 20;
+const CLIENT_PDF_DESCRIPTION_LIMIT = 30;
 
 // --- Helpers ---
 
@@ -75,6 +74,19 @@ function sanitizeAnaliseData(data: AnaliseData): AnaliseData {
 	};
 }
 
+/** Trunca texto visualmente para caber em maxWidth pixels, adicionando "..." se necessário */
+function fitTextToWidth(text: string, font: PDFFont, fontSize: number, maxWidth: number): string {
+	if (!text) return "";
+	if (font.widthOfTextAtSize(text, fontSize) <= maxWidth) return text;
+	for (let i = text.length - 1; i > 0; i--) {
+		const truncated = `${text.slice(0, i).trimEnd()}...`;
+		if (font.widthOfTextAtSize(truncated, fontSize) <= maxWidth) {
+			return truncated;
+		}
+	}
+	return "...";
+}
+
 function truncateClientPdfText(text?: string | null, limit = CLIENT_PDF_DESCRIPTION_LIMIT): string {
 	if (!text) return "";
 	if (text.length <= limit) return text;
@@ -82,17 +94,54 @@ function truncateClientPdfText(text?: string | null, limit = CLIENT_PDF_DESCRIPT
 	return `${text.slice(0, limit - 3).trimEnd()}...`;
 }
 
+/** Extrai apenas o identificador do título, removendo a descrição.
+ * "Quesito 1 - Endereçamento" → "Quesito 1"
+ * "Q2-A - Legitimidade..."    → "Q2-A"
+ * "Questão 1 A"               → "Q1-A"
+ * "Questão 4 - Item B"        → "Q4-B"
+ */
+function extractTitleIdentifier(titulo: string): string {
+	if (!titulo) return "";
+	const trimmed = titulo.trim();
+
+	// "Q1-A", "Q2-B", "QPECA-07" — already short, strip description after separator
+	const shortMatch = trimmed.match(/^(Q\d+(?:-[A-Z])?)(?:\s*-\s|$)/i);
+	if (shortMatch) return shortMatch[1].toUpperCase();
+
+	// "Quesito N" or "Quesito PECA-N" — keep format, strip description
+	const quesitoMatch = trimmed.match(/^(Quesito\s+(?:PECA-?)?\d+(?:-[A-Z])?)/i);
+	if (quesitoMatch) return quesitoMatch[1];
+
+	// "Questão N - Item X" → "QN-X"
+	const questaoItemMatch = trimmed.match(/^Quest[aã]o\s+(\d+)\s*-\s*Item\s+([A-Z])/i);
+	if (questaoItemMatch) return `Q${questaoItemMatch[1]}-${questaoItemMatch[2].toUpperCase()}`;
+
+	// "Questão N X" (number + single letter) → "QN-X"
+	const questaoLetterMatch = trimmed.match(/^Quest[aã]o\s+(\d+)\s+([A-Z])(?=\s|-|$)/i);
+	if (questaoLetterMatch) return `Q${questaoLetterMatch[1]}-${questaoLetterMatch[2].toUpperCase()}`;
+
+	// "Questão N" → "QN"
+	const questaoNumMatch = trimmed.match(/^Quest[aã]o\s+(\d+)/i);
+	if (questaoNumMatch) return `Q${questaoNumMatch[1]}`;
+
+	// Fallback: strip description after " - "
+	const dashIndex = trimmed.indexOf(" - ");
+	if (dashIndex > 0) return trimmed.slice(0, dashIndex).trim();
+
+	return trimmed;
+}
+
 function buildClientPdfData(data: AnaliseData): AnaliseData {
 	return {
 		...data,
 		pontosPeca: data.pontosPeca?.map((item) => ({
 			...item,
-			titulo: truncateClientPdfText(item.titulo, CLIENT_PDF_TITLE_LIMIT),
+			titulo: extractTitleIdentifier(item.titulo),
 			descricao: truncateClientPdfText(item.descricao, CLIENT_PDF_DESCRIPTION_LIMIT),
 		})),
 		pontosQuestoes: data.pontosQuestoes?.map((item) => ({
 			...item,
-			titulo: truncateClientPdfText(item.titulo, CLIENT_PDF_TITLE_LIMIT),
+			titulo: extractTitleIdentifier(item.titulo),
 			descricao: truncateClientPdfText(item.descricao, CLIENT_PDF_DESCRIPTION_LIMIT),
 		})),
 	};
@@ -448,7 +497,8 @@ function drawMetricCards(
 	y: number,
 ): number {
 	const gap = 12;
-	const cardWidth = (CONTENT_WIDTH - gap * 2) / 3;
+	const cols = metrics.length;
+	const cardWidth = (CONTENT_WIDTH - gap * (cols - 1)) / cols;
 	const cardHeight = 54;
 
 	metrics.forEach((metric, index) => {
@@ -542,120 +592,6 @@ function drawNarrativePanel(
 	return options.y - boxHeight - 18;
 }
 
-function drawListSection(
-	page: PDFPage,
-	fontRegular: PDFFont,
-	fontBold: PDFFont,
-	options: {
-		y: number;
-		eyebrow: string;
-		title: string;
-		items: Array<{ titulo?: string; descricao?: string; valor?: string }>;
-		emptyMessage: string;
-		accentColor: RGB;
-		fillColor: RGB;
-	},
-): number {
-	page.drawText(options.eyebrow.toUpperCase(), {
-		x: MARGIN_LEFT,
-		y: options.y,
-		size: 7,
-		font: fontBold,
-		color: options.accentColor,
-	});
-	page.drawText(options.title, {
-		x: MARGIN_LEFT,
-		y: options.y - 16,
-		size: 13,
-		font: fontBold,
-		color: COLOR_BLACK,
-	});
-
-	const rows = options.items.length > 0 ? options.items.length : 1;
-	const rowHeight = 46;
-	const boxTop = options.y - 28;
-	const boxHeight = rows * rowHeight + 18;
-
-	drawSurfaceBox(page, MARGIN_LEFT, boxTop, CONTENT_WIDTH, boxHeight, {
-		fillColor: options.fillColor,
-		borderColor: COLOR_BORDER,
-		accentColor: options.accentColor,
-		accentSide: "top",
-		accentHeight: 3,
-	});
-
-	if (options.items.length === 0) {
-		page.drawText(options.emptyMessage, {
-			x: MARGIN_LEFT + 16,
-			y: boxTop - 28,
-			size: 9,
-			font: fontRegular,
-			color: COLOR_MUTED,
-		});
-		return boxTop - boxHeight - 18;
-	}
-
-	let rowY = boxTop - 10;
-	options.items.forEach((item, index) => {
-		const cardX = MARGIN_LEFT + 12;
-		const cardY = rowY;
-		const cardHeight = 34;
-		const cardWidth = CONTENT_WIDTH - 24;
-		const badgeSize = 18;
-		const valueText = item.valor || "";
-		const valueWidth = Math.max(fontBold.widthOfTextAtSize(valueText, 8) + 18, 48);
-
-		drawSurfaceBox(page, cardX, cardY, cardWidth, cardHeight, {
-			fillColor: index % 2 === 0 ? COLOR_PAPER : COLOR_IVORY,
-			borderColor: COLOR_BORDER,
-			accentColor: options.accentColor,
-			accentSide: "left",
-			accentHeight: 3,
-		});
-
-		page.drawRectangle({
-			x: cardX + 10,
-			y: cardY - 8 - badgeSize,
-			width: badgeSize,
-			height: badgeSize,
-			color: options.accentColor,
-		});
-		page.drawText(String(index + 1).padStart(2, "0"), {
-			x: cardX + 14,
-			y: cardY - 20,
-			size: 7,
-			font: fontBold,
-			color: COLOR_PAPER,
-		});
-
-		drawBadge(page, valueText, cardX + cardWidth - valueWidth - 10, cardY - 8, fontBold, {
-			fontSize: 8,
-			fillColor: COLOR_SOFT_GOLD,
-			textColor: COLOR_RED,
-			borderColor: COLOR_GOLD,
-		});
-
-		page.drawText(item.titulo || "-", {
-			x: cardX + 38,
-			y: cardY - 16,
-			size: 9,
-			font: fontBold,
-			color: COLOR_BLACK,
-		});
-		page.drawText(item.descricao || "", {
-			x: cardX + 38,
-			y: cardY - 28,
-			size: 7.5,
-			font: fontRegular,
-			color: COLOR_GRAY,
-		});
-
-		rowY -= rowHeight;
-	});
-
-	return boxTop - boxHeight - 18;
-}
-
 /** Desenha o footer padrão */
 function drawFooter(page: PDFPage, font: PDFFont, pageLabel?: string) {
 	const footerY = 30;
@@ -700,6 +636,174 @@ function drawFooter(page: PDFPage, font: PDFFont, pageLabel?: string) {
 	}
 }
 
+// --- Paginação dinâmica ---
+
+const MIN_CONTENT_Y = MARGIN_BOTTOM + 40;
+
+interface PdfState {
+	doc: PDFDocument;
+	page: PDFPage;
+	y: number;
+	pageNum: number;
+	fenixImage: PDFImage;
+	fontRegular: PDFFont;
+	fontBold: PDFFont;
+}
+
+function startNewPage(state: PdfState): void {
+	drawFooter(state.page, state.fontRegular, String(state.pageNum).padStart(2, "0"));
+	state.pageNum++;
+	state.page = state.doc.addPage(PageSizes.A4);
+	drawPhoenixWatermark(state.page, state.fenixImage);
+	state.y = A4_HEIGHT - MARGIN_TOP;
+}
+
+function ensureSpace(state: PdfState, neededHeight: number): void {
+	if (state.y - neededHeight < MIN_CONTENT_Y) {
+		startNewPage(state);
+	}
+}
+
+function drawListSectionPaginated(
+	state: PdfState,
+	options: {
+		eyebrow: string;
+		title: string;
+		items: Array<{ titulo?: string; descricao?: string; valor?: string }>;
+		emptyMessage: string;
+		accentColor: RGB;
+		fillColor: RGB;
+	},
+): void {
+	const { fontRegular, fontBold } = state;
+	const rowHeight = 46;
+	const cardHeight = 34;
+
+	ensureSpace(state, 80);
+
+	state.page.drawText(options.eyebrow.toUpperCase(), {
+		x: MARGIN_LEFT,
+		y: state.y,
+		size: 7,
+		font: fontBold,
+		color: options.accentColor,
+	});
+	state.page.drawText(options.title, {
+		x: MARGIN_LEFT,
+		y: state.y - 16,
+		size: 13,
+		font: fontBold,
+		color: COLOR_BLACK,
+	});
+	state.y -= 28;
+
+	if (options.items.length === 0) {
+		const boxHeight = 46 + 18;
+		drawSurfaceBox(state.page, MARGIN_LEFT, state.y, CONTENT_WIDTH, boxHeight, {
+			fillColor: options.fillColor,
+			borderColor: COLOR_BORDER,
+			accentColor: options.accentColor,
+			accentSide: "top",
+			accentHeight: 3,
+		});
+		state.page.drawText(options.emptyMessage, {
+			x: MARGIN_LEFT + 16,
+			y: state.y - 28,
+			size: 9,
+			font: fontRegular,
+			color: COLOR_MUTED,
+		});
+		state.y -= boxHeight + 18;
+		return;
+	}
+
+	for (let index = 0; index < options.items.length; index++) {
+		const item = options.items[index];
+
+		ensureSpace(state, rowHeight + 10);
+
+		const cardX = MARGIN_LEFT + 12;
+		const cardY = state.y;
+		const cardWidth = CONTENT_WIDTH - 24;
+		const badgeSize = 18;
+		const valueText = item.valor || "";
+		const valueWidth = Math.max(fontBold.widthOfTextAtSize(valueText, 8) + 18, 48);
+
+		drawSurfaceBox(state.page, cardX, cardY, cardWidth, cardHeight, {
+			fillColor: index % 2 === 0 ? COLOR_PAPER : COLOR_IVORY,
+			borderColor: COLOR_BORDER,
+			accentColor: options.accentColor,
+			accentSide: "left",
+			accentHeight: 3,
+		});
+
+		state.page.drawRectangle({
+			x: cardX + 10,
+			y: cardY - 8 - badgeSize,
+			width: badgeSize,
+			height: badgeSize,
+			color: options.accentColor,
+		});
+		state.page.drawText(String(index + 1).padStart(2, "0"), {
+			x: cardX + 14,
+			y: cardY - 20,
+			size: 7,
+			font: fontBold,
+			color: COLOR_PAPER,
+		});
+
+		drawBadge(state.page, valueText, cardX + cardWidth - valueWidth - 10, cardY - 8, fontBold, {
+			fontSize: 8,
+			fillColor: COLOR_SOFT_GOLD,
+			textColor: COLOR_RED,
+			borderColor: COLOR_GOLD,
+		});
+
+		const textStartX = cardX + 38;
+		const availableTextWidth = cardWidth - 38 - valueWidth - 20;
+
+		state.page.drawText(fitTextToWidth(item.titulo || "-", fontBold, 9, availableTextWidth), {
+			x: textStartX,
+			y: cardY - 16,
+			size: 9,
+			font: fontBold,
+			color: COLOR_BLACK,
+		});
+		state.page.drawText(fitTextToWidth(item.descricao || "", fontRegular, 7.5, availableTextWidth), {
+			x: textStartX,
+			y: cardY - 28,
+			size: 7.5,
+			font: fontRegular,
+			color: COLOR_GRAY,
+		});
+
+		state.y -= rowHeight;
+	}
+
+	state.y -= 18;
+}
+
+function drawNarrativePanelPaginated(
+	state: PdfState,
+	options: {
+		title: string;
+		text: string;
+		eyebrow?: string;
+		fillColor?: RGB;
+		accentColor?: RGB;
+	},
+): void {
+	const textLines = wrapText(options.text, state.fontRegular, 8.5, CONTENT_WIDTH - 30);
+	const boxHeight = textLines.length * 11 + 40;
+
+	ensureSpace(state, boxHeight);
+
+	state.y = drawNarrativePanel(state.page, state.fontRegular, state.fontBold, {
+		y: state.y,
+		...options,
+	});
+}
+
 // --- Geração do Relatório (cliente) ---
 
 async function generateRelatorioPdf(data: AnaliseData, fenixImageBytes: Buffer): Promise<Uint8Array> {
@@ -709,15 +813,21 @@ async function generateRelatorioPdf(data: AnaliseData, fenixImageBytes: Buffer):
 	const fenixImage = await doc.embedPng(fenixImageBytes);
 	const clientData = buildClientPdfData(data);
 
-	// ========== PÁGINA 1 ==========
 	const page1 = doc.addPage(PageSizes.A4);
-	let y = A4_HEIGHT - MARGIN_TOP;
-
-	// Fênix Background Watermark
 	drawPhoenixWatermark(page1, fenixImage);
 
-	y = drawHeroBanner(page1, fontRegular, fontBold, {
-		y,
+	const state: PdfState = {
+		doc,
+		page: page1,
+		y: A4_HEIGHT - MARGIN_TOP,
+		pageNum: 1,
+		fenixImage,
+		fontRegular,
+		fontBold,
+	};
+
+	state.y = drawHeroBanner(state.page, fontRegular, fontBold, {
+		y: state.y,
 		eyebrow: "Relatório de viabilidade jurídica",
 		title: "Método Fênix",
 		subtitle: "Documento visual do potencial de ganho identificado na análise, com conteúdo resumido para proteção anti-plágio.",
@@ -727,8 +837,8 @@ async function generateRelatorioPdf(data: AnaliseData, fenixImageBytes: Buffer):
 		calloutCaption: "Teses macro e valores",
 	});
 
-	y = drawMetadataGrid(
-		page1,
+	state.y = drawMetadataGrid(
+		state.page,
 		fontRegular,
 		fontBold,
 		[
@@ -741,25 +851,23 @@ async function generateRelatorioPdf(data: AnaliseData, fenixImageBytes: Buffer):
 			["Nota Informada", "XXXXX"],
 			["Status", "Análise concluída"],
 		],
-		y,
+		state.y,
 	);
 
-	y = drawMetricCards(
-		page1,
+	state.y = drawMetricCards(
+		state.page,
 		fontBold,
 		[
 			{ label: "Potencial na Peça", value: clientData.subtotalPeca || "0,00", tone: "gold" },
 			{ label: "Potencial em Questões", value: clientData.subtotalQuestoes || "0,00", tone: "red" },
-			{ label: "Proteção", value: "Anti-plágio ativo", tone: "neutral" },
 		],
-		y,
+		state.y,
 	);
 
 	const obsText =
-		'Este é um relatório de viabilidade e não o recurso final. Ele apresenta apenas os tópicos macro (os "títulos" das teses) e seus respectivos valores, sem a argumentação jurídica detalhada. Esta medida é necessária para proteger o trabalho intelectual envolvido na análise – que é realizada de forma minuciosa e pessoal – e evitar o plágio. O objetivo é comprovar a análise e o potencial de ganho.';
+		'Este é um relatório de viabilidade e não o recurso final. Ele apresenta apenas os tópicos macro (os "títulos" das teses) e seus respectivos valores, sem a argumentação jurídica detalhada. Esta medida é necessária para proteger o trabalho intelectual envolvido na análise - que é realizada de forma minuciosa e pessoal - e evitar o plágio. O objetivo é comprovar a análise e o potencial de ganho.';
 
-	y = drawNarrativePanel(page1, fontRegular, fontBold, {
-		y,
+	drawNarrativePanelPaginated(state, {
 		title: "Observação importante",
 		text: obsText,
 		eyebrow: "Proteção intelectual",
@@ -767,8 +875,7 @@ async function generateRelatorioPdf(data: AnaliseData, fenixImageBytes: Buffer):
 		accentColor: COLOR_RED,
 	});
 
-	y = drawListSection(page1, fontRegular, fontBold, {
-		y,
+	drawListSectionPaginated(state, {
 		eyebrow: "Peça profissional",
 		title: "Potencial de ganhos identificado na peça",
 		items: (clientData.pontosPeca || []).map((item) => ({
@@ -781,27 +888,7 @@ async function generateRelatorioPdf(data: AnaliseData, fenixImageBytes: Buffer):
 		fillColor: COLOR_SOFT_GOLD,
 	});
 
-	drawFooter(page1, fontRegular, "01");
-
-	// ========== PÁGINA 2 ==========
-	const page2 = doc.addPage(PageSizes.A4);
-	let y2 = A4_HEIGHT - MARGIN_TOP;
-
-	drawPhoenixWatermark(page2, fenixImage);
-
-	y2 = drawHeroBanner(page2, fontRegular, fontBold, {
-		y: y2,
-		eyebrow: "Continuação do relatório",
-		title: "Ganhos por questão",
-		subtitle: "Abaixo estão os tópicos macro detectados nas questões discursivas e a síntese final da análise.",
-		badge: "PÁGINA 02",
-		calloutTitle: "Leitura",
-		calloutValue: "Objetiva",
-		calloutCaption: "Sem argumentação detalhada",
-	});
-
-	y2 = drawListSection(page2, fontRegular, fontBold, {
-		y: y2,
+	drawListSectionPaginated(state, {
 		eyebrow: "Questões discursivas",
 		title: "Ganhos possíveis nas questões",
 		items: (clientData.pontosQuestoes || []).map((item) => ({
@@ -814,8 +901,7 @@ async function generateRelatorioPdf(data: AnaliseData, fenixImageBytes: Buffer):
 		fillColor: COLOR_SOFT_RED,
 	});
 
-	y2 = drawNarrativePanel(page2, fontRegular, fontBold, {
-		y: y2,
+	drawNarrativePanelPaginated(state, {
 		title: "Conclusão geral",
 		text: data.conclusao || "Sem conclusão informada.",
 		eyebrow: "Síntese final",
@@ -823,7 +909,7 @@ async function generateRelatorioPdf(data: AnaliseData, fenixImageBytes: Buffer):
 		accentColor: COLOR_GOLD,
 	});
 
-	drawFooter(page2, fontRegular, "02");
+	drawFooter(state.page, fontRegular, String(state.pageNum).padStart(2, "0"));
 
 	return doc.save();
 }

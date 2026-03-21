@@ -298,11 +298,17 @@ async function updateLeadOnFailure(leadId: string, errorMessage: string): Promis
 			return;
 		}
 
-		// Notificar erro via SSE
+		// Notificar erro via SSE e sincronizar o lead já com a flag limpa.
 		const sseManager = await getSseManager();
 		await sseManager.sendNotification(leadId, {
 			type: "error",
 			message: `Ocorreu um erro na análise: ${errorMessage.slice(0, 200)}`,
+			timestamp: new Date().toISOString(),
+		});
+		await sseManager.sendNotification(leadId, {
+			type: "leadUpdate",
+			message: "A análise falhou e o processamento foi encerrado.",
+			leadData: await getLeadOperationLeadData(leadId),
 			timestamp: new Date().toISOString(),
 		});
 	} catch (e: any) {

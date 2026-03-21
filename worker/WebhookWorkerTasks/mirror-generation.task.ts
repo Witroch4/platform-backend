@@ -336,6 +336,12 @@ async function updateLeadOnMirrorFailure(leadId: string, errorMessage: string): 
 			leadId,
 			timestamp: new Date().toISOString(),
 		});
+		await sseManager.sendNotification(leadId, {
+			type: "leadUpdate",
+			message: "A geração do espelho falhou e o processamento foi encerrado.",
+			leadData: await getLeadOperationLeadData(leadId),
+			timestamp: new Date().toISOString(),
+		});
 	} catch (e: any) {
 		log.error("Erro ao atualizar lead on failure", e);
 	}

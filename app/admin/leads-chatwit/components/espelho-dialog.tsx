@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
 	Dialog,
 	DialogContent,
@@ -23,6 +24,11 @@ import { StructuredEditor } from "./StructuredEditor";
 import { Badge } from "@/components/ui/badge";
 import type { LeadChatwit } from "../types";
 import type { StudentMirrorPayload, StudentMirrorItem } from "@/lib/oab-eval/types";
+import {
+	fetchLeadChatwitDetail,
+	leadChatwitDetailQueryKey,
+	useLeadOperationStatus,
+} from "../hooks/useLeadOperationStatus";
 
 interface EspelhoDialogProps {
 	isOpen: boolean;
@@ -347,6 +353,12 @@ export function EspelhoDialog({
 	onBatchNext,
 	onBatchSkip,
 }: EspelhoDialogProps) {
+	const queryClient = useQueryClient();
+	const { operation, isTerminal } = useLeadOperationStatus({
+		leadId,
+		stage: "mirror",
+		enabled: isOpen && !!leadId && !!aguardandoEspelho,
+	});
 	const [texto, setTexto] = useState<any>(textoEspelho);
 	const [imagens, setImagens] = useState<string[]>(imagensEspelho);
 	const [isSaving, setIsSaving] = useState(false);
@@ -369,11 +381,11 @@ export function EspelhoDialog({
 
 		const syncFreshLead = async () => {
 			try {
-				const response = await fetch(`/api/admin/leads-chatwit/leads?id=${leadId}`);
-				if (!response.ok) {
-					return;
-				}
-				const freshLead = await response.json();
+				const freshLead = await queryClient.fetchQuery({
+					queryKey: leadChatwitDetailQueryKey(leadId),
+					queryFn: () => fetchLeadChatwitDetail(leadId),
+					staleTime: 0,
+				});
 				const novoTexto = freshLead.jsonMirror || freshLead.textoDOEspelho;
 				const novasImagens = freshLead.imagensEspelho || [];
 
@@ -405,21 +417,41 @@ export function EspelhoDialog({
 			}
 		};
 
-		const handleConnectionStatus = (event: Event) => {
-			const customEvent = event as CustomEvent<{ status?: string }>;
-			if (customEvent.detail?.status === "disconnected") {
-				void syncFreshLead();
-			}
-		};
-
 		window.addEventListener("lead-update", handleLeadUpdate as EventListener);
-		window.addEventListener("lead-operations-connection", handleConnectionStatus as EventListener);
 
 		return () => {
 			window.removeEventListener("lead-update", handleLeadUpdate as EventListener);
-			window.removeEventListener("lead-operations-connection", handleConnectionStatus as EventListener);
 		};
-	}, [isOpen, leadId, aguardandoEspelho]);
+	}, [aguardandoEspelho, isOpen, leadId, queryClient]);
+
+	useEffect(() => {
+		if (!isOpen || !leadId || !aguardandoEspelho || !isTerminal) {
+			return;
+		}
+
+		if (operation?.status === "completed" || operation?.status === "failed" || operation?.status === "canceled") {
+			void queryClient
+				.fetchQuery({
+					queryKey: leadChatwitDetailQueryKey(leadId),
+					queryFn: () => fetchLeadChatwitDetail(leadId),
+					staleTime: 0,
+				})
+				.then((freshLead) => {
+					const novoTexto = freshLead.jsonMirror || freshLead.textoDOEspelho;
+					const novasImagens = freshLead.imagensEspelho || [];
+
+					if (novoTexto) {
+						setTexto(novoTexto);
+					}
+					if (novasImagens.length > 0) {
+						setImagens(novasImagens);
+					}
+				})
+				.catch((error) => {
+					console.error("[EspelhoDialog] Erro ao sincronizar fallback de status:", error);
+				});
+		}
+	}, [aguardandoEspelho, isOpen, isTerminal, leadId, operation?.status, queryClient]);
 
 	// Atualiza o texto quando as props mudam
 	useEffect(() => {

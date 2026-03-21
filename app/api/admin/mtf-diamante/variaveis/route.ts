@@ -109,6 +109,22 @@ export async function GET(request: NextRequest) {
 		const valorAnaliseVar = config.variaveis.find((v) => v.chave === "analise" || v.chave === "valor_analise");
 		const valorAnaliseStr = String(valorAnaliseVar?.valor || "");
 
+		// Helper para verificar se lote está vencido
+		const isLoteVencido = (lote: any): boolean => {
+			if (!lote.dataFim) return false;
+			const dataFim = new Date(lote.dataFim);
+			if (Number.isNaN(dataFim.getTime())) return false;
+			return dataFim.getTime() < Date.now();
+		};
+
+		// Helper para formatar lote vencido com ~strikethrough~ WhatsApp
+		const formatarLoteVencido = (lote: any): string => {
+			return formatarLote(lote)
+				.split("\n")
+				.map((line: string) => `~${line}~`)
+				.join("\n");
+		};
+
 		// Helper para formatar lote ativo com complemento calculado
 		const formatarLoteAtivo = (lote: any) => {
 			const base = formatarLote(lote);
@@ -162,15 +178,19 @@ export async function GET(request: NextRequest) {
 
 		// lote_1, lote_2, lote_3, etc. — cada lote individual por número
 		const sortedLotes = [...lotes].sort((a: any, b: any) => a.numero - b.numero);
+		const loteAtivoNumero = loteAtivo?.numero ?? -1;
 		for (const lote of sortedLotes) {
+			const isActive = lote.numero === loteAtivoNumero;
+			const vencido = !isActive && isLoteVencido(lote);
+
 			variaveisLotes.push({
 				id: `lote_${lote.numero}`,
 				chave: `lote_${lote.numero}`,
-				valor: formatarLote(lote),
+				valor: isActive ? "" : vencido ? formatarLoteVencido(lote) : formatarLote(lote),
 				valorRaw: lote.valor,
 				tipo: "lote" as const,
-				descricao: `Lote ${lote.numero} - ${lote.nome || "Sem nome"}`,
-				displayName: `Lote ${lote.numero}`,
+				descricao: `Lote ${lote.numero} - ${lote.nome || "Sem nome"}${vencido ? " (Vencido)" : ""}`,
+				displayName: `Lote ${lote.numero}${vencido ? " (Vencido)" : ""}`,
 				isActive: lote.isActive === true,
 				loteData: {
 					id: lote.id,

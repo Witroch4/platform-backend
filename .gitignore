@@ -65,3 +65,16 @@ next-env.d.ts
 id_rsa.v3
 /ssh-mcp/
 
+# Screenshots / debug images
+.playwright-mcp/
+temp/
+*.png
+*.jpg
+*.jpeg
+!public/**/*.png
+!public/**/*.jpg
+!public/**/*.jpeg
+!public/**/*.svg
+!assets/**/*.png
+!assets/**/*.jpg
+

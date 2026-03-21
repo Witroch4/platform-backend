@@ -205,15 +205,19 @@ function extractTokenUsage(result: any): { input?: number; output?: number; tota
 		output = output ?? usage.output_tokens;
 	}
 
-	// Path 2: Fallback para providerMetadata.google (Gemini pode não popular usage corretamente)
-	if (input === undefined || output === undefined) {
-		const googleMeta = result.experimental_providerMetadata?.google?.usageMetadata
-			?? result.providerMetadata?.google?.usageMetadata;
-		if (googleMeta) {
-			input = input ?? googleMeta.promptTokenCount;
+	// Path 2: providerMetadata.google — SEMPRE tenta, não só como fallback.
+	// Gemini thinking models: completionTokens do Vercel SDK inclui thinking tokens.
+	// candidatesTokenCount é o output real (sem thinking). thoughtsTokenCount é separado.
+	const googleMeta = result.experimental_providerMetadata?.google?.usageMetadata
+		?? result.providerMetadata?.google?.usageMetadata;
+	if (googleMeta) {
+		input = input ?? googleMeta.promptTokenCount;
+		if (googleMeta.thoughtsTokenCount) {
+			// Modelo com thinking: usa candidatesTokenCount como output real e extrai thinking separado
+			thinking = googleMeta.thoughtsTokenCount;
+			output = googleMeta.candidatesTokenCount ?? output;
+		} else {
 			output = output ?? googleMeta.candidatesTokenCount ?? googleMeta.totalTokenCount;
-			// Thinking tokens do Gemini (separado do output real)
-			thinking = thinking ?? googleMeta.thoughtsTokenCount ?? googleMeta.cachedContentTokenCount;
 		}
 	}
 
@@ -222,8 +226,12 @@ function extractTokenUsage(result: any): { input?: number; output?: number; tota
 		const responseMeta = result.response?.usageMetadata ?? result.rawResponse?.usageMetadata;
 		if (responseMeta) {
 			input = input ?? responseMeta.promptTokenCount;
-			output = output ?? responseMeta.candidatesTokenCount ?? responseMeta.totalTokenCount;
-			thinking = thinking ?? responseMeta.thoughtsTokenCount;
+			if (responseMeta.thoughtsTokenCount && !thinking) {
+				thinking = responseMeta.thoughtsTokenCount;
+				output = responseMeta.candidatesTokenCount ?? output;
+			} else {
+				output = output ?? responseMeta.candidatesTokenCount ?? responseMeta.totalTokenCount;
+			}
 		}
 	}
 
@@ -237,7 +245,7 @@ function extractTokenUsage(result: any): { input?: number; output?: number; tota
 		return undefined;
 	}
 
-	const total = usage?.totalTokens ?? usage?.total_tokens ?? ((input ?? 0) + (output ?? 0));
+	const total = usage?.totalTokens ?? usage?.total_tokens ?? ((input ?? 0) + (output ?? 0) + (thinking ?? 0));
 
 	return {
 		input,
@@ -301,8 +309,10 @@ async function transcribeSingleImage(
 		const result = await withRetry(async () => {
 			retryCount++;
 			const aiModel = createModel(options.provider, model);
+			// OCR/transcrição não precisa de thinking pesado — "minimal" para Gemini 3 (thinkingLevel)
+			// e budget 0 para Gemini 2.5 (thinkingBudget). Só eleva se blueprint configurar explicitamente.
 			const providerOptions = buildProviderOptions(options.provider, model, {
-				reasoningEffort: options.reasoningEffort ?? "medium",
+				reasoningEffort: options.reasoningEffort ?? "minimal",
 			});
 
 			return generateText({

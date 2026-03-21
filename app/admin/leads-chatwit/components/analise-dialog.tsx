@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
 	Dialog,
 	DialogContent,
@@ -15,6 +16,11 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+	fetchLeadChatwitDetail,
+	leadChatwitDetailQueryKey,
+	useLeadOperationStatus,
+} from "../hooks/useLeadOperationStatus";
 
 interface AnaliseDialogProps {
 	isOpen: boolean;
@@ -47,6 +53,22 @@ export function AnaliseDialog({
 	onCancelarAnalise,
 	isAnaliseValidada = false,
 }: AnaliseDialogProps) {
+	const queryClient = useQueryClient();
+	const [liveLeadData, setLiveLeadData] = useState<{
+		analiseUrl?: string | null;
+		argumentacaoUrl?: string | null;
+		analisePreliminar?: any;
+		aguardandoAnalise?: boolean;
+	} | null>(null);
+	const effectiveAnaliseUrl = liveLeadData?.analiseUrl ?? analiseUrl;
+	const effectiveArgumentacaoUrl = liveLeadData?.argumentacaoUrl ?? argumentacaoUrl;
+	const effectiveAnalisePreliminar = liveLeadData?.analisePreliminar ?? analisePreliminar;
+	const effectiveAguardandoAnalise = liveLeadData?.aguardandoAnalise ?? aguardandoAnalise;
+	const { operation, isTerminal } = useLeadOperationStatus({
+		leadId,
+		stage: "analysis",
+		enabled: isOpen && !!leadId && !!aguardandoAnalise,
+	});
 	const [textoAnotacoes, setTextoAnotacoes] = useState(anotacoes || "");
 	const [accessToken, setAccessToken] = useState("");
 	const [isSaving, setIsSaving] = useState(false);
@@ -56,16 +78,17 @@ export function AnaliseDialog({
 	const [analysisJustCompleted, setAnalysisJustCompleted] = useState(false);
 
 	useEffect(() => {
-		if (isOpen && analisePreliminar && !analiseUrl && !aguardandoAnalise) {
+		if (isOpen && effectiveAnalisePreliminar && !effectiveAnaliseUrl && !effectiveAguardandoAnalise) {
 			// A análise interna terminou enquanto o dialog estava aberto
 			setAnalysisJustCompleted(true);
 		}
-	}, [isOpen, analisePreliminar, analiseUrl, aguardandoAnalise]);
+	}, [effectiveAguardandoAnalise, effectiveAnalisePreliminar, effectiveAnaliseUrl, isOpen]);
 
 	// Resetar estado ao fechar o dialog
 	useEffect(() => {
 		if (!isOpen) {
 			setAnalysisJustCompleted(false);
+			setLiveLeadData(null);
 		}
 	}, [isOpen]);
 	const [isCancelando, setIsCancelando] = useState(false);
@@ -73,7 +96,7 @@ export function AnaliseDialog({
 
 	// Mensagem padrão para enviar com o PDF
 	const MENSAGEM_PADRAO =
-		"Segue a nossa análise em versão resumida. Para a argumentação completa, consulte o recurso.";
+		"Segue a nossa análise. Para a argumentação completa, consulte o recurso.";
 
 	// Atualiza as anotações quando o diálogo for aberto ou as props mudarem
 	useEffect(() => {
@@ -85,6 +108,37 @@ export function AnaliseDialog({
 			fetchAccessToken();
 		}
 	}, [isOpen, anotacoes, leadId]);
+
+	useEffect(() => {
+		if (!isOpen || !leadId || !aguardandoAnalise || !isTerminal) {
+			return;
+		}
+
+		if (
+			operation?.status === "completed" ||
+			operation?.status === "failed" ||
+			operation?.status === "canceled" ||
+			operation?.status === "inconsistent"
+		) {
+			void queryClient
+				.fetchQuery({
+					queryKey: leadChatwitDetailQueryKey(leadId),
+					queryFn: () => fetchLeadChatwitDetail(leadId),
+					staleTime: 0,
+				})
+				.then((freshLead) => {
+					setLiveLeadData({
+						analiseUrl: freshLead.analiseUrl,
+						argumentacaoUrl: freshLead.argumentacaoUrl,
+						analisePreliminar: freshLead.analisePreliminar,
+						aguardandoAnalise: freshLead.aguardandoAnalise,
+					});
+				})
+				.catch((error) => {
+					console.error("[AnaliseDialog] Erro ao sincronizar fallback de status:", error);
+				});
+		}
+	}, [aguardandoAnalise, isOpen, isTerminal, leadId, operation?.status, queryClient]);
 
 	// Função para buscar o token personalizado do banco de dados
 	const fetchAccessToken = async () => {
@@ -148,7 +202,7 @@ export function AnaliseDialog({
 	};
 
 	const handleEnviarPdf = async () => {
-		if (!analiseUrl) {
+		if (!effectiveAnaliseUrl) {
 			toast("Erro", { description: "Não há análise disponível para enviar." });
 			return;
 		}
@@ -208,14 +262,14 @@ export function AnaliseDialog({
 	};
 
 	const abrirPdfAnalise = () => {
-		if (analiseUrl) {
-			window.open(analiseUrl, "_blank");
+		if (effectiveAnaliseUrl) {
+			window.open(effectiveAnaliseUrl, "_blank");
 		}
 	};
 
 	const abrirPdfArgumentacao = () => {
-		if (argumentacaoUrl) {
-			window.open(argumentacaoUrl, "_blank");
+		if (effectiveArgumentacaoUrl) {
+			window.open(effectiveArgumentacaoUrl, "_blank");
 		}
 	};
 
@@ -225,11 +279,11 @@ export function AnaliseDialog({
 				<DialogHeader>
 					<DialogTitle>{isAnaliseValidada ? "Análise Validada da Prova" : "Análise da Prova"}</DialogTitle>
 					<DialogDescription>
-						{aguardandoAnalise
+						{effectiveAguardandoAnalise
 							? "A análise está sendo processada. Aguarde..."
 							: analysisJustCompleted
 								? "A análise foi concluída com sucesso!"
-								: analiseUrl
+								: effectiveAnaliseUrl
 									? isAnaliseValidada
 										? "Visualize o PDF de análise validada e envie para o chat do lead."
 										: "Visualize o PDF de análise e adicione anotações."
@@ -239,7 +293,7 @@ export function AnaliseDialog({
 				<div className="py-4 space-y-6">
 					{/* Status da Análise */}
 					<div className="flex flex-col items-center justify-center">
-						{aguardandoAnalise ? (
+						{effectiveAguardandoAnalise ? (
 							<div className="flex flex-col items-center justify-center py-8">
 								<Loader2 className="h-16 w-16 text-primary animate-spin mb-4" />
 								<p className="text-lg font-medium">Aguardando Análise</p>
@@ -274,7 +328,7 @@ export function AnaliseDialog({
 									Fechar e Visualizar
 								</Button>
 							</div>
-						) : analiseUrl ? (
+						) : effectiveAnaliseUrl ? (
 							<div className="space-y-4">
 								{/* Botão da Análise */}
 								<div
@@ -292,7 +346,7 @@ export function AnaliseDialog({
 								</div>
 
 								{/* Botão da Argumentação (só mostra se tiver argumentacaoUrl) */}
-								{argumentacaoUrl && (
+								{effectiveArgumentacaoUrl && (
 									<div
 										className="flex flex-col items-center justify-center p-6 border-2 border-dashed rounded-lg cursor-pointer hover:bg-accent/30 transition-colors"
 										onClick={abrirPdfArgumentacao}
@@ -318,7 +372,7 @@ export function AnaliseDialog({
 					</div>
 
 					{/* Mensagem para envio - mostrar sempre que tiver analiseUrl */}
-					{analiseUrl && (
+					{effectiveAnaliseUrl && (
 						<div className="space-y-2">
 							<h3 className="text-lg font-medium">Escreva uma Mensagem</h3>
 							<Alert>
@@ -338,7 +392,7 @@ export function AnaliseDialog({
 					)}
 
 					{/* Token de acesso personalizado */}
-					{analiseUrl && (
+					{effectiveAnaliseUrl && (
 						<div className="space-y-2 border p-4 rounded-md">
 							<h3 className="text-md font-medium flex items-center">
 								<Key className="h-4 w-4 mr-2" />
@@ -368,7 +422,7 @@ export function AnaliseDialog({
 					)}
 
 					{/* Anotações - só mostrar se não for análise validada e não tiver analiseUrl */}
-					{!isAnaliseValidada && !analiseUrl && (
+					{!isAnaliseValidada && !effectiveAnaliseUrl && (
 						<div className="space-y-2">
 							<h3 className="text-lg font-medium">Anotações</h3>
 							<Textarea
@@ -388,7 +442,7 @@ export function AnaliseDialog({
 						</Button>
 
 						{/* Botão de salvar anotações - só mostrar se não for análise validada e não tiver analiseUrl*/}
-						{!isAnaliseValidada && !analiseUrl && (
+						{!isAnaliseValidada && !effectiveAnaliseUrl && (
 							<Button variant="default" onClick={handleSaveAnotacoes} disabled={isSaving}>
 								{isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
 								Salvar Anotações
@@ -396,8 +450,8 @@ export function AnaliseDialog({
 						)}
 					</div>
 
-					{analiseUrl && (
-						<Button variant="default" onClick={handleEnviarPdf} disabled={isEnviando || !analiseUrl}>
+					{effectiveAnaliseUrl && (
+						<Button variant="default" onClick={handleEnviarPdf} disabled={isEnviando || !effectiveAnaliseUrl}>
 							{isEnviando ? (
 								<>
 									<Loader2 className="mr-2 h-4 w-4 animate-spin" />

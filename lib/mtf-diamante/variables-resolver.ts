@@ -46,6 +46,26 @@ function formatarLote(lote: LoteOab): string {
 	return `*Lote ${lote.numero}: ${lote.nome || "Sem nome"}*\n*Valor: ${lote.valor}*\n*Período: ${formatarDataHora(lote.dataInicio)} às ${formatarDataHora(lote.dataFim)}*`;
 }
 
+/**
+ * Verifica se um lote está vencido (dataFim < agora)
+ */
+function isLoteVencido(lote: LoteOab): boolean {
+	if (!lote.dataFim) return false;
+	const dataFim = new Date(lote.dataFim);
+	if (Number.isNaN(dataFim.getTime())) return false;
+	return dataFim.getTime() < Date.now();
+}
+
+/**
+ * Formata lote vencido com ~strikethrough~ WhatsApp em cada linha
+ */
+function formatarLoteVencido(lote: LoteOab): string {
+	return formatarLote(lote)
+		.split("\n")
+		.map((line) => `~${line}~`)
+		.join("\n");
+}
+
 function formatarLoteAtivo(lote: LoteOab, valorAnalise: string): string {
 	const base = formatarLote(lote);
 	const loteNum = parseCurrencyToNumber(lote.valor);
@@ -114,10 +134,19 @@ export async function getAllVariablesForUser(userId: string): Promise<VariavelRe
 			}
 
 			// Individual lote_N variables
+			const loteAtivoNumero = loteAtivo?.numero ?? -1;
 			for (const lote of lotes) {
+				let valor: string;
+				if (lote.numero === loteAtivoNumero) {
+					valor = ""; // Já aparece via {{lote_ativo}}, não duplicar
+				} else if (isLoteVencido(lote)) {
+					valor = formatarLoteVencido(lote);
+				} else {
+					valor = formatarLote(lote);
+				}
 				variaveis.push({
 					chave: `lote_${lote.numero}`,
-					valor: formatarLote(lote),
+					valor,
 					tipo: "lote",
 				});
 			}

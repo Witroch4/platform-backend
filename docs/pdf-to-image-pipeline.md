@@ -120,3 +120,63 @@ O pipeline produz logs estruturados com prefixo `[PDF-TO-IMAGE]`:
 | 2026-03-19 | PNG → JPEG q90 (revert de teste PNG) | Manteve 16s (PNG era 40s) |
 | 2026-03-20 | sharp post-processing (resize 2048px + q80) | 8-11MB → 90-506KB/pg |
 | 2026-03-20 | Desativar thumbnail generation | -11 uploads extras |
+| 2026-03-20 | **Python pipeline** (JusMonitorIA backend) | 13.5s → ~4-6s (**3× mais rapido**) |
+
+---
+
+## Python Pipeline (JusMonitorIA)
+
+> Alternativa ao pipeline local (pdftoppm + sharp) que roda no backend Python do JusMonitorIA via rede Docker interna. Ativada por env `PYTHON_PIPELINE=true`.
+
+### Por que mais rapido?
+
+| Aspecto | Node.js (local) | Python (JusMonitorIA) |
+|---------|-----------------|----------------------|
+| **Engine** | pdftoppm (subprocess fork+exec) | **PyMuPDF (binding C direto, zero subprocess)** |
+| **Resize** | sharp (libvips) | Pillow (Lanczos) |
+| **Tempo (11 pgs)** | 13.5s | **~4-6s** |
+| **Paralelismo** | 3 ranges (subprocess) | ProcessPoolExecutor (N CPUs) |
+
+PyMuPDF renderiza **in-process** via binding C ao MuPDF — elimina ~200ms de overhead por fork/exec.
+
+### Endpoint
+
+```
+POST http://backend:8000/api/v1/pdf/convert-to-images
+Header: X-Internal-Key: <PJE_INTERNAL_API_KEY>
+
+Body: {
+  "pdf_urls": ["https://objstoreapi.witdev.com.br/socialwise/lead-xxx.pdf"],
+  "bucket": "socialwise",
+  "prefix": "leads/converted",
+  "max_dimension": 2048,
+  "jpeg_quality": 80,
+  "dpi": 300
+}
+
+Response: {
+  "success": true,
+  "image_urls": ["https://objstoreapi.witdev.com.br/socialwise/leads/converted/abc123/page-000.jpg", ...],
+  "total_pages": 11,
+  "elapsed_seconds": 4.2,
+  "failed_urls": []
+}
+```
+
+### Configuracao no Socialwise
+
+```env
+# .env
+PYTHON_PIPELINE=true
+JUSMONITORIA_BACKEND_URL=http://backend:8000  # Docker internal
+PJE_INTERNAL_API_KEY=<mesma chave do .env do JusMonitorIA>
+```
+
+### Arquivos no JusMonitorIA
+
+| Arquivo | Papel |
+|---------|-------|
+| `backend/app/core/services/pdf_image_converter.py` | Renderizacao PyMuPDF + Pillow |
+| `backend/app/api/v1/endpoints/pdf_converter.py` | Endpoint FastAPI |
+| `backend/app/core/services/storage.py` | `upload_bytes_to_bucket()` |
+

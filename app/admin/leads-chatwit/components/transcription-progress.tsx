@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { CheckCircle2, XCircle, Loader2, Clock, Zap, ArrowRightLeft, DollarSign, Cpu } from "lucide-react";
+import { useLeadOperationStatus } from "../hooks/useLeadOperationStatus";
 
 // ----- Estimativa de custo por modelo (USD por 1M tokens) -----
 const PRICE_PER_1M: Record<string, { in: number; out: number }> = {
@@ -52,6 +53,11 @@ interface TranscriptionProgressProps {
 // ----- Component -----
 
 export function TranscriptionProgress({ leadId, totalPages }: TranscriptionProgressProps) {
+	const { operation } = useLeadOperationStatus({
+		leadId,
+		stage: "transcription",
+		enabled: !!leadId,
+	});
 	const [pages, setPages] = useState<Map<number, PageState>>(() => {
 		const initial = new Map<number, PageState>();
 		for (let i = 1; i <= totalPages; i++) {
@@ -65,38 +71,6 @@ export function TranscriptionProgress({ leadId, totalPages }: TranscriptionProgr
 
 	useEffect(() => {
 		if (!leadId) return;
-
-		const syncFromStatus = async () => {
-			try {
-				const response = await fetch(`/api/admin/leads-chatwit/operations/status?leadId=${encodeURIComponent(leadId)}&stage=transcription`);
-				if (!response.ok) return;
-				const status = await response.json();
-				if (status.status === "processing" && status.progress) {
-					const progress = status.progress as {
-						currentPage?: number;
-						totalPages?: number;
-						percentage?: number;
-						estimatedTimeRemaining?: number;
-					};
-
-					if (progress.currentPage && progress.totalPages) {
-						handleStarted({ totalPages: progress.totalPages });
-						handlePageComplete({
-							page: progress.currentPage,
-							totalPages: progress.totalPages,
-							percentage: progress.percentage ?? 0,
-							estimatedTimeRemaining: progress.estimatedTimeRemaining,
-						});
-					}
-				} else if (status.status === "completed") {
-					setCompleted(true);
-				}
-			} catch {
-				// fallback silencioso
-			}
-		};
-
-		void syncFromStatus();
 
 		const handleLeadNotification = (event: Event) => {
 			const customEvent = event as CustomEvent<{
@@ -121,19 +95,10 @@ export function TranscriptionProgress({ leadId, totalPages }: TranscriptionProgr
 			}
 		};
 
-		const handleConnectionChange = (event: Event) => {
-			const customEvent = event as CustomEvent<{ status?: string }>;
-			if (customEvent.detail?.status === "disconnected") {
-				void syncFromStatus();
-			}
-		};
-
 		window.addEventListener("lead-notification", handleLeadNotification as EventListener);
-		window.addEventListener("lead-operations-connection", handleConnectionChange as EventListener);
 
 		return () => {
 			window.removeEventListener("lead-notification", handleLeadNotification as EventListener);
-			window.removeEventListener("lead-operations-connection", handleConnectionChange as EventListener);
 		};
 	// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [leadId]);
@@ -199,6 +164,41 @@ export function TranscriptionProgress({ leadId, totalPages }: TranscriptionProgr
 		}
 		setEstimatedTimeRemaining(undefined);
 	}, []);
+
+	useEffect(() => {
+		if (!operation) {
+			return;
+		}
+
+		if (operation.status === "processing" && typeof operation.progress === "object" && operation.progress) {
+			const progress = operation.progress as {
+				currentPage?: number;
+				totalPages?: number;
+				percentage?: number;
+				estimatedTimeRemaining?: number;
+			};
+
+			if (progress.totalPages) {
+				handleStarted({ totalPages: progress.totalPages });
+			}
+
+			if (progress.currentPage && progress.totalPages) {
+				handlePageComplete({
+					page: progress.currentPage,
+					totalPages: progress.totalPages,
+					percentage: progress.percentage ?? 0,
+					estimatedTimeRemaining: progress.estimatedTimeRemaining,
+				});
+			}
+
+			return;
+		}
+
+		if (operation.status === "completed") {
+			setCompleted(true);
+			setEstimatedTimeRemaining(undefined);
+		}
+	}, [handlePageComplete, handleStarted, operation]);
 
 	// Derived stats
 	const sortedPages = Array.from(pages.entries()).sort(([a], [b]) => a - b);
