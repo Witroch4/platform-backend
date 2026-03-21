@@ -7,6 +7,16 @@
 
 ### 2026-03-21
 
+- **Seção B.5 implementada**: pipeline de classificação de intenções do SocialWise Flow portado para Python, com processor reutilizável para a B.6.
+- Adicionados 2 mirrors Prisma que a documentação original omitia para a B.5: `Intent` e `AiAssistantInbox`.
+- Expandido `domains/socialwise/db/models/ai_assistant.py` com o subset real usado pelo pipeline de intents (deadlines, fallback model/provider, flags de handoff/sugestão, session TTL).
+- Implementado `platform_core/ai/litellm_config.py` com `call_embedding()` compartilhado via LiteLLM para o classificador SocialWise.
+- Criado o pacote `domains/socialwise/services/intent/` com `types.py`, `assistant_config.py`, `cache.py`, `classification.py`, `provider_processor.py`, `bands.py`, `button_processor.py`, `payload_builder.py` e `processor.py`.
+- Corrigido bug implícito do pipeline TypeScript: `IntentCandidate.slug` agora usa o `Intent.slug` real em vez de reaproveitar `Intent.name`, evitando payloads inválidos quando nome e slug divergem.
+- Corrigido bug de mirror descoberto em runtime: `AiAssistantInbox` não possui `updatedAt` no banco real; o model Python foi ajustado para `createdAt`-only.
+- Corrigido bug de mirror descoberto em runtime: a coluna `AiAssistant.thinkingLevel` não existe no banco Socialwise atual; o model Python foi ajustado para refletir o schema real validado no compose.
+- Validação da B.5: runtime real no compose OK (consultas `ChatwitInbox`/`AiAssistant`/`Intent`, `load_assistant_configuration()`, `process_socialwise_intent()`), `python -m pytest tests/domains/socialwise/intent` OK (`7 passed`) via instalação efêmera de `pytest`/`pytest-asyncio` no container, `tsc --noEmit` OK, `git diff --check` OK.
+- Gap explícito mantido para a B.6: persistência de contexto/sessão do Router LLM e anti-loop contextual continuam dependentes da migração do webhook/session-manager.
 - **Seção B.4 concluída**: Flow Engine Workers portados para Python (FlowBuilder 6 job types + FlowCampaign 3 job types + orchestrator).
 - Adicionado 1 novo mirror Prisma: `ChatwitInbox` em `domains/socialwise/db/models/chatwit_inbox.py` — dependência da B.4 que a doc original omitia (lookup inbox → accountId + channelType para campanhas).
 - Implementado `domains/socialwise/services/flow/delivery_service.py` — `ChatwitDeliveryService` (axios → httpx, retry 3x com exponential backoff, 7 delivery types: text, media, interactive, template, reaction, chatwit_action, update_contact).
@@ -226,6 +236,26 @@ Repo: `/home/wital/platform-backend`
 | `domains/socialwise/tasks/flow_campaign.py` — 3 job types (EXECUTE_CONTACT, PROCESS_BATCH, CAMPAIGN_CONTROL) + orchestrator | ✅ |
 | ast.parse 11/11 OK, Docker imports OK, tsc --noEmit OK | ✅ |
 | Integração com FlowOrchestrator (execução real do flow) | ⏳ pendente (B.6) |
+
+### ✅ Fase 7 — Seção B.5: SocialWise Flow (Intent Classification) (CONCLUÍDA 2026-03-21)
+
+| Item | Status |
+|------|--------|
+| `domains/socialwise/db/models/intent.py` — Mirror Intent | ✅ |
+| `domains/socialwise/db/models/ai_assistant_inbox.py` — Mirror AiAssistantInbox | ✅ |
+| `domains/socialwise/services/intent/assistant_config.py` — resolução assistant/inbox + overrides | ✅ |
+| `domains/socialwise/services/intent/cache.py` — cache Redis namespaced (classification/warmup/embedding) | ✅ |
+| `domains/socialwise/services/intent/classification.py` — embedding-first classifier com HARD/SOFT/ROUTER | ✅ |
+| `domains/socialwise/services/intent/provider_processor.py` — warmup/router via LiteLLM | ✅ |
+| `domains/socialwise/services/intent/bands.py` — handlers por banda | ✅ |
+| `domains/socialwise/services/intent/button_processor.py` — detecção `flow_`, `@falar_atendente`, `intent:` | ✅ |
+| `domains/socialwise/services/intent/payload_builder.py` — payloads interativos para WhatsApp/Instagram/Facebook | ✅ |
+| `domains/socialwise/services/intent/processor.py` — entry-point plugável na B.6 | ✅ |
+| `platform_core/ai/litellm_config.py` — `call_embedding()` compartilhado | ✅ |
+| Testes unitários Python (`7 passed`) no compose | ✅ |
+| Runtime compose (`ChatwitInbox`/`AiAssistant`/`Intent` + processor) | ✅ |
+| Benchmark A/B com 200 mensagens reais | ⏳ pendente (dataset/prod) |
+| Persistência de sessão/contexto do Router LLM no webhook FastAPI | ⏳ plugar na B.6 |
 
 ### ✅ Fase 5 — Seção B.3: Agentes IA OAB (CONCLUÍDA 2026-03-21)
 
@@ -890,7 +920,7 @@ O Flow Engine core (Orchestrator, Executor, SyncBridge) **permanece no Next.js**
 
 ---
 
-## B.5 — SocialWise Flow (Intent Classification)
+## B.5 — SocialWise Flow (Intent Classification) ✅ IMPLEMENTADA 2026-03-21
 
 O pipeline de classificação de intenções que roda no webhook.
 
@@ -901,18 +931,48 @@ O pipeline de classificação de intenções que roda no webhook.
 | `lib/socialwise-flow/processor.ts` | `domains/socialwise/services/intent/processor.py` | Entry-point classificação |
 | `lib/socialwise-flow/classification.ts` | `domains/socialwise/services/intent/classification.py` | Intent detection |
 | `lib/socialwise-flow/performance-bands.ts` | `domains/socialwise/services/intent/bands.py` | HARD/ROUTER/FALLBACK |
+| `lib/socialwise-flow/processor-components/assistant-config.ts` | `domains/socialwise/services/intent/assistant_config.py` | Resolução assistant/inbox + overrides |
 | `lib/socialwise-flow/services/ai-provider-factory.ts` | (absorvido pelo LiteLLM) | Provider abstraction |
 | `lib/socialwise-flow/services/multi-provider-processor.ts` | `domains/socialwise/services/intent/provider_processor.py` | Seleção de provider |
 | `lib/socialwise-flow/services/retry-handler.ts` | (absorvido pelo LiteLLM retry) | Retry com degradação |
 | `lib/socialwise-flow/button-processor.ts` | `domains/socialwise/services/intent/button_processor.py` | Detecção `flow_` buttons |
 | `lib/socialwise-flow/meta-payload-builder.ts` | `domains/socialwise/services/intent/payload_builder.py` | Builder mensagens interativas |
 | `lib/socialwise-flow/cache-manager.ts` | `domains/socialwise/services/intent/cache.py` | Redis cache |
+| Prisma `Intent` (não listado na doc original) | `domains/socialwise/db/models/intent.py` | Intents globais com embedding/slug |
+| Prisma `AiAssistantInbox` (não listado na doc original) | `domains/socialwise/db/models/ai_assistant_inbox.py` | Link assistant ↔ inbox |
+| (novo shared infra) | `platform_core/ai/litellm_config.py` | `call_embedding()` + retry/circuit breaker |
+
+### Omissões descobertas e corrigidas
+
+- A doc original não listava os mirrors `Intent` e `AiAssistantInbox`, mas a B.5 depende deles diretamente.
+- O mirror `AiAssistant` precisava ser expandido com os campos reais usados pelo pipeline (`fallbackModel`, `fallbackProvider`, `verbosity`, deadlines, `disableIntentSuggestion`, `proposeHumanHandoff`, session TTLs).
+- O banco Socialwise atual não possui `AiAssistant.thinkingLevel`; o mirror Python foi ajustado para seguir o schema real do compose, não apenas o Prisma do workspace.
+- `AiAssistantInbox` não possui `updatedAt`; o primeiro mirror criado herdava isso por engano e foi corrigido após validação runtime.
+- O classificador TS propagava `Intent.name` como slug candidato; na porta Python isso foi corrigido para usar `Intent.slug`.
+
+### Notas e decisões
+
+- **Processor da B.5 já é plugável na B.6**: `process_socialwise_intent()` já retorna `selected_intent`, `response` ou `action` (`resume_flow`/`handoff`) no formato esperado para o webhook FastAPI.
+- **Warmup e Router LLM estão portados sem `ai-provider-factory`**: o provider agora é resolvido via LiteLLM (`resolve_litellm_model` + `call_structured`/`call_embedding`).
+- **Persistência de sessão do Router não foi portada nesta task**: o TS usa session-manager/contexto de conversa para anti-loop contextual. Isso depende da migração do webhook/session bridge e fica explicitamente para a B.6.
+- **Payloads interativos foram reduzidos ao contrato necessário da B.5**: `payload_builder.py` cobre respostas interativas de classificação (warmup/router) para WhatsApp/Instagram/Facebook. Template/flow delivery completo continua na B.6/B.4.
+
+### Validação executada
+
+- `python -m pytest tests/domains/socialwise/intent -q` dentro do compose: `7 passed in 5.12s`.
+- Observação de ambiente: a imagem atual do `platform-backend` não inclui `pytest`; a execução acima foi feita com instalação efêmera de `pytest` + `pytest-asyncio` no container, sem alterar o repositório.
+- Runtime real no compose: consultas a `ChatwitInbox`, `AiAssistant` e `Intent` OK; `load_assistant_configuration()` OK; `process_socialwise_intent(embedipreview=False)` OK.
+- `pnpm exec tsc --noEmit`: OK.
+- `pnpm exec tsc --noEmit -p tsconfig.worker.json`: OK.
+- `git diff --check`: OK.
 
 ### Tarefas
 
-- [ ] Portar pipeline de classificação
-- [ ] Integrar com LiteLLM (substituir ai-provider-factory)
-- [ ] Testar: classificação retorna mesmos resultados (benchmark com 200 mensagens reais)
+- [x] Portar pipeline de classificação
+- [x] Integrar com LiteLLM (substituir ai-provider-factory)
+- [x] Validar unit tests + runtime no compose + TypeScript
+- [ ] Benchmark A/B: classificação retorna mesmos resultados (200 mensagens reais)
+- [ ] Plugar contexto de sessão/anti-loop do Router no webhook FastAPI (B.6)
 
 ---
 
