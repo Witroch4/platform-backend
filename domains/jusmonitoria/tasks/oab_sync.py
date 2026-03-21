@@ -14,7 +14,7 @@ from uuid import UUID
 
 from sqlalchemy import select
 
-from platform_core.db.sessions import AsyncSessionLocal
+from domains.jusmonitoria.db.session_compat import AsyncSessionLocal
 from domains.jusmonitoria.db.models.oab_sync_config import OABSyncConfig
 from domains.jusmonitoria.db.models.tenant import Tenant
 from domains.jusmonitoria.db.models.user_oab import UserOAB

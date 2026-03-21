@@ -3,9 +3,9 @@
 import logging
 from uuid import UUID
 
-from domains.jusmonitoria.services.chatwit_client import ChatwitService
+from domains.jusmonitoria.services.chatwit_client import ChatwitClient
 from domains.jusmonitoria.services.crm.funnel_automations import FunnelAutomations
-from platform_core.db.sessions import session_ctx
+from domains.jusmonitoria.db.session_compat import session_ctx
 from platform_core.tasks.brokers.jusmonitoria import broker_jm as broker
 from domains.jusmonitoria.tasks.base import BaseTask
 
@@ -49,7 +49,7 @@ async def process_new_lead_automations(
         # Initialize Chatwit service if API key provided
         chatwit_service = None
         if chatwit_api_key:
-            chatwit_service = ChatwitService(
+            chatwit_service = ChatwitClient(
                 api_key=chatwit_api_key,
             )
         
@@ -203,7 +203,7 @@ async def send_follow_up_reminder(
         
         # Send reminder via Chatwit if available
         if chatwit_api_key and lead.chatwit_contact_id:
-            chatwit_service = ChatwitService(
+            chatwit_service = ChatwitClient(
                 api_key=chatwit_api_key,
             )
             

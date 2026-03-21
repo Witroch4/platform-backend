@@ -7,7 +7,7 @@ from uuid import UUID
 from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from platform_core.db.sessions import AsyncSessionLocal, session_ctx
+from domains.jusmonitoria.db.session_compat import AsyncSessionLocal, session_ctx
 from domains.jusmonitoria.db.models.ai_conversation import AIConversation
 from domains.jusmonitoria.db.models.case_movement import CaseMovement
 from domains.jusmonitoria.db.models.legal_case import LegalCase

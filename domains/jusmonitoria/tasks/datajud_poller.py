@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from domains.jusmonitoria.services.datajud.batcher import Batch, create_batcher
 from domains.jusmonitoria.services.datajud.client import create_datajud_client
 from domains.jusmonitoria.services.datajud.parser import Movement, create_parser
-from platform_core.db.sessions import AsyncSessionLocal
+from domains.jusmonitoria.db.session_compat import AsyncSessionLocal
 from domains.jusmonitoria.db.models.case_movement import CaseMovement
 from domains.jusmonitoria.db.models.legal_case import LegalCase
 from domains.jusmonitoria.db.repositories.case_movement import CaseMovementRepository

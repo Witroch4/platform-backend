@@ -10,7 +10,7 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from platform_core.config import settings
-from platform_core.db.sessions import session_ctx
+from domains.jusmonitoria.db.session_compat import session_ctx
 from domains.jusmonitoria.db.models.case_movement import CaseMovement
 from domains.jusmonitoria.db.models.timeline_embedding import TimelineEmbedding
 from domains.jusmonitoria.db.models.timeline_event import TimelineEvent

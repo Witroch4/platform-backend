@@ -22,7 +22,7 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 from domains.jusmonitoria.services.scraper_client import baixar_documento, detalhar_processo, listar_processos
-from platform_core.db.sessions import AsyncSessionLocal
+from domains.jusmonitoria.db.session_compat import AsyncSessionLocal
 from domains.jusmonitoria.db.repositories.caso_oab import CasoOABRepository, OABSyncConfigRepository
 from platform_core.tasks.brokers.jusmonitoria import broker_jm as broker
 

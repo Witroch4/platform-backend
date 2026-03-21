@@ -7,7 +7,7 @@ from uuid import UUID
 import structlog
 from sqlalchemy.orm.attributes import flag_modified
 
-from platform_core.db.sessions import AsyncSessionLocal
+from domains.jusmonitoria.db.session_compat import AsyncSessionLocal
 from domains.jusmonitoria.db.models.lead import Lead, LeadSource, LeadStage, LeadStatus
 from domains.jusmonitoria.db.repositories.client_automation import ClientAutomationRepository
 from domains.jusmonitoria.db.repositories.lead import LeadRepository

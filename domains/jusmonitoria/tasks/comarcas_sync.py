@@ -16,7 +16,7 @@ from datetime import UTC, datetime
 
 from platform_core.config import settings
 from domains.jusmonitoria.services.scraper_client import coletar_comarcas
-from platform_core.db.sessions import session_ctx
+from domains.jusmonitoria.db.session_compat import session_ctx
 from platform_core.tasks.brokers.jusmonitoria import broker_jm as broker
 
 logger = logging.getLogger(__name__)

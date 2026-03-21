@@ -19,7 +19,7 @@ from sqlalchemy import func, select, text
 from sqlalchemy.dialects.postgresql import insert
 
 from domains.jusmonitoria.services.tpu.cnj_client import CnjTpuClient
-from platform_core.db.sessions import AsyncSessionLocal
+from domains.jusmonitoria.db.session_compat import AsyncSessionLocal
 from domains.jusmonitoria.db.models.tpu import TpuAssunto, TpuClasse, TpuDocumento
 from platform_core.tasks.brokers.jusmonitoria import broker_jm as broker
 from domains.jusmonitoria.tasks.base import BaseTask

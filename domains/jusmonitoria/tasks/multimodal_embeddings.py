@@ -20,7 +20,7 @@ from domains.jusmonitoria.services.multimodal_embedding_service import (
     MultimodalEmbeddingService,
 )
 from domains.jusmonitoria.services.storage import download_bytes_from_s3
-from platform_core.db.sessions import session_ctx
+from domains.jusmonitoria.db.session_compat import session_ctx
 from domains.jusmonitoria.db.models.case_movement import CaseMovement
 from domains.jusmonitoria.db.models.document_embedding import DocumentEmbedding, EmbeddingSourceType
 from platform_core.tasks.brokers.jusmonitoria import broker_jm as broker

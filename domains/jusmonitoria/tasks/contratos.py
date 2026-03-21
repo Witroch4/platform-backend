@@ -10,7 +10,7 @@ from uuid import UUID
 
 from sqlalchemy import select, distinct
 
-from platform_core.db.sessions import AsyncSessionLocal
+from domains.jusmonitoria.db.session_compat import AsyncSessionLocal
 from domains.jusmonitoria.db.models.contrato import Contrato, StatusContrato
 from domains.jusmonitoria.db.models.fatura import Fatura, StatusFatura
 from domains.jusmonitoria.services.contrato_service import ContratoService

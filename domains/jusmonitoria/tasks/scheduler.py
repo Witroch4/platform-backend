@@ -9,7 +9,7 @@ from croniter import croniter
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from platform_core.db.sessions import session_ctx
+from domains.jusmonitoria.db.session_compat import session_ctx
 from domains.jusmonitoria.db.models.worker_schedule import WorkerSchedule
 
 logger = logging.getLogger(__name__)
@@ -50,16 +50,17 @@ async def _run_task(task_name: str, func: Callable) -> None:
     """Execute a task with error handling."""
     try:
         logger.info("scheduler_task_running", extra={"task_name": task_name})
-        if asyncio.iscoroutinefunction(func):
-            await func()
-        else:
-            func()
+        result = func()
+        if asyncio.iscoroutine(result):
+            await result
         logger.info("scheduler_task_completed", extra={"task_name": task_name})
     except Exception as e:
-        logger.error("scheduler_task_failed", extra={
-            "task_name": task_name,
-            "error": str(e),
-        })
+        logger.error(
+            "scheduler_task_failed",
+            task_name=task_name,
+            error=str(e),
+            exc_info=True,
+        )
 
 
 def _get_next_run(cron_expression: str, base_time: Optional[datetime] = None) -> datetime:

@@ -51,6 +51,22 @@ services:
     networks:
       - minha_rede
 
+  platform-scheduler-socialwise:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: platform-scheduler-sw
+    command: >
+      taskiq scheduler domains.socialwise.tasks.scheduler:scheduler
+      --tasks-pattern "domains/socialwise/tasks/**/*.py"
+    env_file: .env
+    environment:
+      PYTHONPATH: /app
+    volumes:
+      - .:/app
+    networks:
+      - minha_rede
+
 networks:
   minha_rede:
     external: true

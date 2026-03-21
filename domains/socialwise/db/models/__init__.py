@@ -7,6 +7,8 @@ All models must be imported here so SQLAlchemy metadata is populated.
 """
 
 from domains.socialwise.db.models.account import Account
+from domains.socialwise.db.models.ai_agent_blueprint import AiAgentBlueprint
+from domains.socialwise.db.models.ai_assistant import AiAssistant
 from domains.socialwise.db.models.arquivo_lead_oab import ArquivoLeadOab
 from domains.socialwise.db.models.audit_log import AuditLog
 from domains.socialwise.db.models.agendamento import Agendamento
@@ -57,6 +59,9 @@ from domains.socialwise.db.models.webhook_config import WebhookConfig
 from domains.socialwise.db.models.webhook_delivery import WebhookDelivery, WebhookEvent
 
 __all__ = [
+    # AI Blueprints/Assistants
+    "AiAgentBlueprint",
+    "AiAssistant",
     # Core auth/social
     "User",
     "Account",

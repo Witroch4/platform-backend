@@ -7,13 +7,13 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from domains.jusmonitoria.services.chatwit_client import ChatwitService
+from domains.jusmonitoria.services.chatwit_client import ChatwitClient
 from domains.jusmonitoria.services.crm.lead_scorer import LeadScorer
 from domains.jusmonitoria.services.crm.lead_state_machine import LeadStateMachine
 from domains.jusmonitoria.db.models.lead import Lead, LeadStage
 from domains.jusmonitoria.db.models.timeline_event import TimelineEvent
 from domains.jusmonitoria.db.repositories.lead import LeadRepository
-from domains.jusmonitoria.tasks.events.bus import publish_event
+from domains.jusmonitoria.tasks.events.bus import publish
 from domains.jusmonitoria.tasks.events.types import EventType
 
 logger = logging.getLogger(__name__)
@@ -39,7 +39,7 @@ class FunnelAutomations:
         self,
         session: AsyncSession,
         tenant_id: UUID,
-        chatwit_service: Optional[ChatwitService] = None,
+        chatwit_service: Optional[ChatwitClient] = None,
     ):
         """
         Initialize funnel automations.
@@ -296,7 +296,7 @@ class FunnelAutomations:
         flag_modified(lead, "metadata")
         
         # Publish event for follow-up scheduler
-        await publish_event(
+        await publish(
             event_type=EventType.LEAD_CREATED,
             tenant_id=self.tenant_id,
             payload={
@@ -323,7 +323,7 @@ class FunnelAutomations:
             lead: Lead instance
         """
         # Publish notification event
-        await publish_event(
+        await publish(
             event_type=EventType.LEAD_QUALIFIED,
             tenant_id=self.tenant_id,
             payload={

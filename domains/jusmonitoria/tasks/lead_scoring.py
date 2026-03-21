@@ -4,7 +4,7 @@ import logging
 from uuid import UUID
 
 from domains.jusmonitoria.services.crm.lead_scorer import LeadScorer
-from platform_core.db.sessions import session_ctx
+from domains.jusmonitoria.db.session_compat import session_ctx
 from platform_core.tasks.brokers.jusmonitoria import broker_jm as broker
 from domains.jusmonitoria.tasks.base import BaseTask
 

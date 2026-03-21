@@ -182,7 +182,7 @@ async def enqueue_sync_oab(
     await session.commit()
 
     # Dispatch to Taskiq worker (fire-and-forget) — use the new pipeline
-    from domains.jusmonitoria.tasks.tasks.scrape_pipeline import task_orquestrar_pipeline  # local import avoids circular
+    from domains.jusmonitoria.tasks.scrape_pipeline import task_orquestrar_pipeline  # local import avoids circular
     await task_orquestrar_pipeline.kiq(
         tenant_id_str=str(tenant_id),
         sync_config_id_str=str(sync_config.id),

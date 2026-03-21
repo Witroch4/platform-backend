@@ -24,7 +24,7 @@ from domains.jusmonitoria.services.peticoes.mni_client import MniSoapClient
 from domains.jusmonitoria.services.peticoes.pdf_signer import PdfSignerService
 from domains.jusmonitoria.services.peticoes.pdf_validator import PdfValidatorService
 from domains.jusmonitoria.services.peticoes.peticao_service import PeticaoService
-from platform_core.db.sessions import AsyncSessionLocal
+from domains.jusmonitoria.db.session_compat import AsyncSessionLocal
 from domains.jusmonitoria.db.models.peticao import PeticaoStatus
 from domains.jusmonitoria.db.repositories.certificado_digital import CertificadoDigitalRepository
 from domains.jusmonitoria.db.repositories.peticao import PeticaoDocumentoRepository, PeticaoRepository

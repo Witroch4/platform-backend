@@ -38,7 +38,7 @@ from domains.jusmonitoria.schemas.peticao import (
     PeticaoResponse,
     PeticaoUpdate,
 )
-from domains.jusmonitoria.tasks.tasks.multimodal_embeddings import generate_document_embedding
+from domains.jusmonitoria.tasks.multimodal_embeddings import generate_document_embedding
 
 logger = logging.getLogger(__name__)
 
@@ -827,7 +827,7 @@ async def protocolar_peticao(
 
     # Enqueue filing worker
     try:
-        from domains.jusmonitoria.tasks.tasks.peticao_protocolar import protocolar_peticao_task
+        from domains.jusmonitoria.tasks.peticao_protocolar import protocolar_peticao_task
         await protocolar_peticao_task.kiq(
             peticao_id=str(peticao_id),
             tenant_id=str(tenant_id),

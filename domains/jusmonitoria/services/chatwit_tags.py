@@ -360,7 +360,7 @@ async def sync_chatwit_tags_task(tenant_id: UUID) -> dict[str, Any]:
     Returns:
         Sync statistics
     """
-    from platform_core.db.sessions import AsyncSessionLocal
+    from domains.jusmonitoria.db.session_compat import AsyncSessionLocal
     
     async with AsyncSessionLocal() as session:
         service = ChatwitTagService(session, tenant_id)

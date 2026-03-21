@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from domains.jusmonitoria.db.models.lead import Lead, LeadStage, LeadStatus
 from domains.jusmonitoria.db.repositories.lead import LeadRepository
-from domains.jusmonitoria.tasks.events.bus import publish_event
+from domains.jusmonitoria.tasks.events.bus import publish
 from domains.jusmonitoria.tasks.events.types import EventType
 
 logger = logging.getLogger(__name__)
@@ -214,7 +214,7 @@ class LeadStateMachine:
             user_id: User who performed the transition
         """
         try:
-            await publish_event(
+            await publish(
                 event_type=EventType.LEAD_STAGE_CHANGED,
                 tenant_id=self.tenant_id,
                 payload={
