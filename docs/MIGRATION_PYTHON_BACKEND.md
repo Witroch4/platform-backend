@@ -7,6 +7,13 @@
 
 ### 2026-03-21
 
+- **Seção B.7 expandida pelo grupo `Templates`**: as 7 rotas admin `app/api/admin/mtf-diamante/templates/*` agora têm equivalentes FastAPI em `domains/socialwise/api/v1/endpoints/admin_templates.py`, com lógica extraída para `domains/socialwise/services/flow/admin_templates_service.py`.
+- O Socialwise Next.js deixou de executar a integração Meta Graph API (CRUD de templates WhatsApp, sync de status, edição) diretamente: os route handlers viraram BFF proxies finos para o `platform-backend`.
+- Adicionado 1 mirror Prisma que a documentação original não listava para a B.7: `WhatsAppGlobalConfig` em `domains/socialwise/db/models/whatsapp_global_config.py`, necessário para resolver credenciais da Meta API por usuário.
+- Expandido o mirror `UsuarioChatwit` com o relationship `whatsapp_global_config` para eager-load da configuração WhatsApp.
+- Adicionadas settings `fb_graph_api_base`, `whatsapp_business_id` e `whatsapp_token` ao `platform_core/config.py` como fallback ENV quando a configuração por usuário não existe.
+- Decisão arquitetural: a rota `ensure-media` (download Meta → upload MinIO) foi portada de forma parcial — o backend Python retorna a `publicMediaUrl` existente do banco, mas o pipeline completo de download/upload (que depende de `uploadToMinIO` no Node.js) fica pendente até o serviço de storage MinIO ser portado em `platform_core/services/storage.py` (Seção C.3).
+- Validação da B.7.3: `docker compose exec -T platform-api python3 -m py_compile ...` OK; `docker compose exec -T platform-api python3 -m pytest tests/domains/socialwise -q` OK (`19 passed`); 10 rotas registradas no FastAPI; `pnpm exec tsc --noEmit` e `pnpm exec tsc --noEmit -p tsconfig.worker.json` OK.
 - **Reorganização de rotas frontend (sem impacto no backend)**:
   - Criada página roteadora `/hub` pós-login (substitui redirect direto para `/admin`).
   - Rotas de produto movidas de `/admin/` para `/mtf-diamante/`: mtf-diamante, MTFdashboard→dashboard, capitão, leads-chatwit→leads.
@@ -280,7 +287,11 @@ Repo: `/home/wital/platform-backend`
 | `socialwise/lib/platform-backend/admin-proxy.ts` — BFF proxy com `X-Internal-API-Key` + `X-App-User-Id` | ✅ |
 | `app/api/admin/mtf-diamante/flows/*` apontando para FastAPI | ✅ |
 | `app/api/admin/mtf-diamante/variaveis/*`, `lote-ativo`, `lotes/*` apontando para FastAPI | ✅ |
-| Templates / Campanhas / Leads / Analytics / Cost / OAB | ⏳ pendente |
+| `domains/socialwise/api/v1/endpoints/admin_templates.py` — grupo `Templates` (10 rotas: CRUD Meta API, inbox-scoped, status sync, edit, ensure-media) | ✅ |
+| `domains/socialwise/services/flow/admin_templates_service.py` — Meta Graph API integration, DB sync, button sort, media URL | ✅ |
+| `domains/socialwise/db/models/whatsapp_global_config.py` — Mirror WhatsAppGlobalConfig | ✅ |
+| `app/api/admin/mtf-diamante/templates/*` (7 route files) apontando para FastAPI | ✅ |
+| Campanhas / Leads / Analytics / Cost / OAB | ⏳ pendente |
 | SSE admin FastAPI | ⏳ pendente |
 | Validação frontend end-to-end do grupo `Flows` via UI real | ⏳ pendente |
 
@@ -1195,10 +1206,58 @@ Migrar as rotas admin do Next.js para FastAPI.
 - [x] Extrair lógica de negócio dos route handlers para services (grupo `Variáveis + Lotes`)
 - [x] Criar endpoints FastAPI equivalentes (grupo `Variáveis + Lotes`)
 - [x] Next.js BFF aponta para FastAPI (grupo `Variáveis + Lotes`)
+- [x] Extrair lógica de negócio dos route handlers para services (grupo `Templates`)
+- [x] Criar endpoints FastAPI equivalentes (grupo `Templates`)
+- [x] Next.js BFF aponta para FastAPI (grupo `Templates`)
 - [ ] Next.js BFF aponta para FastAPI (demais grupos)
 - [ ] Migrar endpoints SSE para FastAPI StreamingResponse
 - [ ] Testar: frontend continua funcionando sem mudanças
-- [ ] Migrar grupos restantes: Templates, Campanhas, Leads, Analytics, Cost e OAB
+- [ ] Migrar grupos restantes: Campanhas, Leads, Analytics, Cost e OAB
+
+### B.7.3 — Grupo `Templates` (CONCLUÍDO 2026-03-21)
+
+#### Arquivos-chave
+
+| Origem | Destino | Papel |
+|--------|---------|-------|
+| `app/api/admin/mtf-diamante/templates/route.ts` | `domains/socialwise/api/v1/endpoints/admin_templates.py` (`GET`,`POST`,`DELETE`) | CRUD Meta API principal |
+| `app/api/admin/mtf-diamante/templates/[caixaId]/route.ts` | `admin_templates.py` (`GET`,`POST` `/{inbox_id}`) | CRUD inbox-scoped |
+| `app/api/admin/mtf-diamante/templates/[caixaId]/[templateId]/route.ts` | `admin_templates.py` (`DELETE /{inbox_id}/{template_id}`) | Deleção com validação de mapeamento |
+| `app/api/admin/mtf-diamante/templates/[caixaId]/[templateId]/status/route.ts` | `admin_templates.py` (`GET /{inbox_id}/{template_id}/status`) | Sync de status com Meta |
+| `app/api/admin/mtf-diamante/templates/details/[id]/route.ts` | `admin_templates.py` (`GET /details/{template_id}`) | Detalhes de template |
+| `app/api/admin/mtf-diamante/templates/ensure-media/route.ts` | `admin_templates.py` (`POST /ensure-media`) | Garantia de mídia pública |
+| `app/api/admin/mtf-diamante/templates/edit/[metaTemplateId]/route.ts` | `admin_templates.py` (`PUT /edit/{meta_template_id}`) | Edição no Meta |
+| lógica inline nos route handlers | `domains/socialwise/services/flow/admin_templates_service.py` | Meta Graph API, sync DB, button sort |
+| Prisma `WhatsAppGlobalConfig` (omitido na doc original) | `domains/socialwise/db/models/whatsapp_global_config.py` | Credenciais WhatsApp por usuário |
+
+#### Entregue nesta etapa
+
+- 10 rotas FastAPI cobrindo todo o CRUD de templates: list (DB + Meta refresh + first-load), create (Meta + DB), delete (Meta), inbox-scoped list/upsert/delete, status sync (Meta → DB), edit (Meta → DB), ensure-media e details.
+- Integração completa com Meta Graph API via `httpx` async: fetch com paginação (max 5 páginas), create, delete, edit, status check.
+- Auto-sort de botões por tipo Meta (COPY_CODE → VOICE_CALL → PHONE_NUMBER → URL → QUICK_REPLY).
+- Validações de negócio portadas: HEADER TEXT max 1 variável, PHONE_NUMBER/VOICE_CALL mutual exclusion, componentes obrigatórios.
+- Sync de templates Meta → DB com upsert (Template + WhatsAppOfficialInfo).
+- Fallback mock templates quando Meta API está indisponível.
+- Route handlers Next.js do grupo `Templates` (7 arquivos) reduzidos a proxy fino autenticado.
+
+#### Omissões descobertas e corrigidas
+
+- A doc original não listava `WhatsAppGlobalConfig`, mas as rotas de templates dependem dele para resolver credenciais Meta por usuário.
+- O mirror `UsuarioChatwit` não tinha o relationship `whatsapp_global_config`; foi adicionado para eager-load.
+- `platform_core/config.py` não tinha settings de fallback para WhatsApp (`fb_graph_api_base`, `whatsapp_business_id`, `whatsapp_token`).
+
+#### Limitações conhecidas
+
+- A rota `ensure-media` retorna 422 quando a `publicMediaUrl` não existe no banco e precisa ser gerada via download Meta → upload MinIO. Esse pipeline depende do serviço de storage MinIO (`platform_core/services/storage.py`) que será implementado na Seção C.3. Enquanto isso, o fallback é usar a rota Next.js original que tem acesso ao `uploadToMinIO()`.
+
+#### Validação executada
+
+- `docker compose exec -T platform-api python3 -m py_compile ...` nos novos arquivos da B.7.3: OK.
+- `docker compose exec -T platform-api python3 -m pytest tests/domains/socialwise -q`: `19 passed in 2.21s`.
+- Import runtime no compose: `WhatsAppGlobalConfig`, `admin_templates_service.*`, `admin_templates.router` OK.
+- 10 rotas registradas no FastAPI router.
+- `pnpm exec tsc --noEmit`: OK.
+- `pnpm exec tsc --noEmit -p tsconfig.worker.json`: OK.
 
 ---
 
@@ -1329,22 +1388,22 @@ Tarefas que podem ser feitas em paralelo com A e B.
 
 ## Status da Última Task
 
-- Task executada: `B.7.2 — Admin API Routes / grupo Variáveis + Lotes`
-- Resultado: o tab de configuração MTF (`variaveis`, `variaveis/seed`, `lote-ativo`, `lotes`) saiu do Next.js e passou a rodar no `platform-backend`, com os route handlers do Socialwise reduzidos a BFF proxy.
-- Lacuna eliminada nesta task: a doc da B.7 omitira `lotes/*` como dependência real do mesmo tab; o slice foi fechado verticalmente no backend Python. Também foi restaurada a hidratação automática das variáveis padrão quando sobra apenas `lotes_oab` interno.
+- Task executada: `B.7.3 — Admin API Routes / grupo Templates`
+- Resultado: as 7 rotas de gerenciamento de templates WhatsApp (CRUD Meta API, inbox-scoped, status sync, edição, ensure-media, detalhes) saíram do Next.js e passaram a rodar no `platform-backend`, com os route handlers do Socialwise reduzidos a BFF proxy.
+- Lacuna eliminada nesta task: a doc da B.7 não listava `WhatsAppGlobalConfig` como dependência das rotas de templates; o mirror foi criado junto com o relationship em `UsuarioChatwit` e as settings de fallback em `platform_core/config.py`.
 
 ### Validações
 
-- `docker compose exec -T platform-api python3 -m py_compile ...`: OK
+- `docker compose exec -T platform-api python3 -m py_compile ...`: OK (4 arquivos)
 - `docker compose exec -T platform-api python3 -m pytest tests/domains/socialwise -q`: `19 passed`
-- runtime do compose: rotas `/api/v1/socialwise/admin/mtf-diamante/variaveis`, `/lotes` e `/lote-ativo` registradas no `create_app()`
+- Import runtime no compose: `WhatsAppGlobalConfig`, `admin_templates_service`, `admin_templates.router` (10 rotas) OK
 - `pnpm exec tsc --noEmit`: OK
 - `pnpm exec tsc --noEmit -p tsconfig.worker.json`: OK
 
 ### Pendências explícitas
 
-- Configurar `PLATFORM_BACKEND_INTERNAL_URL` e `PLATFORM_API_KEY` no ambiente do Socialwise para o BFF proxy do grupo `Flows`.
-- Revalidar end-to-end pela UI real o tab de configuração MTF (`variaveis` + `lotes`) usando o proxy Next.js → FastAPI.
-- Validar o grupo `Flows` end-to-end pela UI real do Flow Builder usando o proxy Next.js → FastAPI.
-- Continuar B.7 migrando os próximos grupos: Templates, Campanhas, Leads, Analytics, Cost e OAB.
+- A rota `ensure-media` (download Meta → upload MinIO) retorna 422 quando precisa gerar nova URL; depende do serviço de storage MinIO (`platform_core/services/storage.py`) a ser implementado na Seção C.3.
+- Configurar `PLATFORM_BACKEND_INTERNAL_URL` e `PLATFORM_API_KEY` no ambiente do Socialwise para o BFF proxy.
+- Revalidar end-to-end pela UI real os tabs de templates, configuração MTF e Flow Builder usando o proxy Next.js → FastAPI.
+- Continuar B.7 migrando os próximos grupos: Campanhas, Leads, Analytics, Cost e OAB.
 - Pendências herdadas e ainda abertas da B.6/B.5: apontar o Chatwit para o webhook FastAPI, validar flow sync+async end-to-end com conversa real e rodar benchmark A/B de 200 mensagens da classificação.
