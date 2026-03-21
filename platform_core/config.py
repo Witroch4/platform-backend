@@ -3,7 +3,7 @@
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field, RedisDsn
+from pydantic import Field, RedisDsn, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -89,6 +89,15 @@ class Settings(BaseSettings):
 
     # Backend public URL (JusMonitorIA webhooks)
     backend_public_url: str = "https://jusmonitoria.witdev.com.br"
+
+    # --- Socialwise legacy integration compat ---
+    socialwise_webhook_url: str = Field(default="", validation_alias="WEBHOOK_URL")
+    socialwise_instagram_graph_api_base: str = Field(
+        default="https://graph.instagram.com/v21.0",
+        validation_alias="IG_GRAPH_API_BASE",
+    )
+    socialwise_automation_base_url: str = "https://chatwit.com.br"
+    socialwise_schedule_prefix: str = "socialwise:schedules"
 
     # Certificate Encryption
     encrypt_key: str = ""  # Fernet key (32 bytes base64) for encrypting PFX blobs
@@ -194,6 +203,17 @@ class Settings(BaseSettings):
     # Super Admin
     super_admin_email: str = ""
     super_admin_password: str = ""
+
+    @field_validator("debug", mode="before")
+    @classmethod
+    def parse_debug_flag(cls, value):
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in {"release", "prod", "production"}:
+                return False
+            if normalized in {"debug", "dev", "development"}:
+                return True
+        return value
 
     @property
     def is_development(self) -> bool:
