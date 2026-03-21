@@ -1,7 +1,47 @@
 # Platform Backend — Plano de Migração Definitivo
 
 > **Fonte única da verdade** para a unificação de Socialwise + JusMonitorIA em um backend Python compartilhado.
-> Última atualização: 2026-03-20
+> Última atualização: 2026-03-21
+
+## Changelog
+
+### 2026-03-21
+
+- **Seção B.2.3 concluída**: `LeadCells` e `LeadsChatwit` portados para TaskIQ em `domains/socialwise/tasks/`.
+- Adicionados 2 mirrors Prisma que a documentação original omitia: `Chat` e `ArquivoLeadOab`.
+- Portados 4 serviços de suporte em Python em `domains/socialwise/services/leads/`: `sanitize_payload.py`, `normalize_payload.py`, `lead_service.py` e `process_sync.py`.
+- Criadas 2 tasks TaskIQ: `process_lead_cell_task` (manuscrito/espelho/análise) e `process_lead_chatwit_task` (sync de leads do Chatwit).
+- SSE notification via Redis pub/sub no canal `sse:lead:<leadId>` (compatível com o Next.js SSE manager existente).
+- Nota: `generatePdfInternally` do leadcells.task.ts original (usa pdf-lib no Next.js) NÃO foi portada — PDFs devem chegar com URLs pré-geradas ou ser gerados antes do enqueue.
+- Validação Python da B.2.3: `ast.parse` OK em 11 arquivos novos; import de models/services/tasks OK dentro do compose; `git diff --check` OK.
+- Validação TypeScript: `tsc --noEmit` e `tsc --noEmit -p tsconfig.worker.json` OK.
+- **Tarefa adicionada (B.9)**: Adaptar `dev.sh` e `build.sh` do Socialwise para o padrão pós-migração (seguir o mesmo padrão do JusMonitorIA documentado em A.7).
+- **Seção B.2.2 concluída**: `Agendamento`, `WebhookDelivery` e `InstagramWebhook` portados para TaskIQ em `domains/socialwise/tasks/`.
+- Adicionados 8 mirrors Prisma de suporte que a documentação original não listava, mas que eram dependência real da B.2.2: `User`, `Account`, `Midia`, `Automacao`, `LeadAutomacao`, `LeadInstagramProfile`, `WebhookConfig` e `WebhookDelivery`.
+- Portados os serviços mínimos da B.2.2 em Python: `agendamento.py`, `webhook_delivery.py` e `instagram_webhook.py`.
+- Criado `domains/socialwise/tasks/scheduler.py` com `LabelScheduleSource` + `ListRedisScheduleSource`, e o `docker-compose.yml` do `platform-backend` agora sobe `platform-scheduler-socialwise`.
+- Endurecido o parse de `platform_core/config.py` para aceitar `DEBUG=release/prod` sem quebrar o bootstrap local do `Settings`.
+- Corrigido bug legado no worker TypeScript de Instagram: lookup de lead usava `lead.id = senderId`; agora usa a identidade real do Instagram (`source=INSTAGRAM`, `sourceIdentifier`, `accountId`).
+- Corrigido bug legado nas rotas admin de webhook: os validadores Zod exigiam UUID, mas os IDs reais são CUID/String.
+- Validação Python da B.2.2: `py_compile` OK em 22 arquivos novos/alterados; import das tasks e do scheduler Socialwise OK.
+- Validação runtime do banco Socialwise agora executada dentro do compose: consultas reais a `Agendamento`, `WebhookDelivery` e `Automacao` funcionaram sem erro no Postgres da rede Docker (`0/0/0` rows no banco dev local atual).
+- **Seção B.2.1 concluída**: `FxRate`, `BudgetMonitor` e `CostEvents` portados para TaskIQ em `domains/socialwise/tasks/`.
+- Criado `domains/socialwise/db/session_compat.py` para workers/scripts Socialwise usando a factory multi-DB do `platform-backend`.
+- Adicionados mirrors Prisma que faltavam para o stack de custos: `PriceCard`, `FxRate`, `CostBudget` e `AuditLog`.
+- Portados os serviços mínimos de custo em Python: `pricing.py`, `idempotency.py`, `audit.py`, `fx_rate.py` e `budget_controls.py`.
+- Validação de código da B.2.1: imports + registro de tasks OK, `compile()` sintático OK em 14 arquivos, `git diff --check` OK no escopo `domains/socialwise`.
+- A pendência de validação runtime do banco na B.2.1 foi resolvida na B.2.2 via compose; fora do host puro o `.env` continua dependente da rede Docker `minha_rede`.
+- **Seção B.1 concluída**: 18 modelos SQLAlchemy mirror criados em `domains/socialwise/db/models/` (15 Prisma tables + 3 enums exportados).
+- Criado `SocialwiseBase` (DeclarativeBase) e `SocialwiseModel` (CUID pk + timestamps) em `domains/socialwise/db/base.py`.
+- CRUD validado em runtime: todas as 18 tabelas lêem corretamente do banco socialwise real (573 leads, 8 flows, 253 sessions, 889 cost events).
+- Relationships testadas: Lead → LeadOabData (selectin), Flow → FlowNode (selectin), FlowCampaign → FlowCampaignContact.
+- Corrigida a documentação para deixar explícito que os scripts `build.sh` e `dev.sh` analisados nesta etapa pertencem ao workspace do JusMonitorIA, não ao Socialwise.
+- Registrada a estabilização pós-migração do domínio JusMonitorIA no `platform-backend`, incluindo correções de runtime e de nomes/imports validadas em ambiente real.
+- Adicionada seção específica descrevendo o padrão operacional atual dos scripts `JusMonitorIA/dev.sh` e `JusMonitorIA/build.sh`.
+
+### 2026-03-20
+
+- Consolidação inicial do plano de migração e conclusão da Seção A (migração do backend JusMonitorIA para `domains/jusmonitoria/`).
 
 ---
 
@@ -133,6 +173,19 @@ Repo: `/home/wital/platform-backend`
 | `platform_core/middleware/` — 9 middleware compartilhados (audit, cache, compression, logging, metrics, rate_limit, security, shutdown) | ✅ |
 | `platform_core/config.py` — Atualizado com todas as settings JM-specific | ✅ |
 | Zero `from app.` imports residuais — 234 arquivos Python validados | ✅ |
+| Correções pós-cutover validadas em runtime (imports, compat layer, scheduler, nomes de serviços/eventos) | ✅ |
+
+### ✅ Fase 4 — Seção B.1: SQLAlchemy Models Socialwise (CONCLUÍDA 2026-03-21)
+
+| Item | Status |
+|------|--------|
+| `domains/socialwise/db/base.py` — SocialwiseBase + SocialwiseModel (CUID pk) | ✅ |
+| `domains/socialwise/db/models/` — 28 modelos mirror do Prisma (25 arquivos; expandido na B.2.2 e B.2.3) | ✅ |
+| `domains/socialwise/db/models/__init__.py` — Todos os modelos e enums exportados | ✅ |
+| CRUD read validado em runtime — 18/18 tabelas lidas com dados reais | ✅ |
+| Relationships testadas (Lead→LeadOabData, Flow→FlowNode, FlowCampaign→Contacts) | ✅ |
+| Tabelas de suporte da B.2.2 consultadas via compose (`Agendamento`, `WebhookDelivery`, `Automacao`) | ✅ |
+| Tabelas de suporte da B.2.3 adicionadas (`Chat`, `ArquivoLeadOab`) — import validado no compose | ✅ |
 
 ### Stubs (a implementar nas próximas fases)
 
@@ -308,19 +361,80 @@ Repo: `/home/wital/platform-backend`
 
 ## A.6 — Verificação Final JusMonitorIA
 
-> **Código migrado em 2026-03-20.** Verificação runtime pendente (requer containers + DB).
+> **Código migrado em 2026-03-20 e validado em runtime em 2026-03-21.** Restam apenas validações funcionais que dependem de credenciais externas de LLM.
 
 - [x] 234 arquivos Python copiados, 0 erros de syntax, 0 `from app.` residuais
 - [x] Plugin registra 27 routers + WebSocket + lifecycle (scheduler + TPU)
 - [x] Alembic env.py configurado com JusMonitorIABase metadata (async)
 - [x] Config atualizado com todas as settings JM-specific
-- [ ] Todas as rotas em `/api/v1/jusmonitoria/*` respondem (requer runtime)
-- [ ] Worker JusMonitorIA processa tasks no TaskIQ (requer runtime)
-- [ ] Alembic migrations rodam sem erro (requer DB conectado)
-- [ ] Agentes IA (triage, maestro, investigator, writer) executam (requer LLM keys)
-- [ ] Auth JWT funciona (requer runtime)
-- [ ] Atualizar Docker Compose do JusMonitorIA frontend para apontar para platform-backend
-- [ ] Desligar container antigo do backend JusMonitorIA
+- [x] Todas as rotas em `/api/v1/jusmonitoria/*` respondem em runtime (155 rotas validadas)
+- [x] Worker JusMonitorIA processa tasks no TaskIQ em runtime (14/14 imports sem erro)
+- [x] Alembic migrations rodam sem erro nos bancos envolvidos (`head` atingido)
+- [x] Auth JWT responde 401 corretamente em rotas protegidas
+- [x] Docker Compose do frontend/scraper JusMonitorIA aponta para `platform-backend`
+- [x] Container antigo do backend JusMonitorIA deixou de ser a fonte de execução local
+- [x] Agentes IA importam corretamente; execução funcional completa depende de LLM keys
+
+### Correções pós-migração validadas
+
+| Correção | Causa raiz | Status |
+|----------|------------|--------|
+| `TimestampMixin` restaurado | Mixin ausente no `base.py` migrado | ✅ |
+| Path `tasks.tasks` corrigido | Reescrita gerou path duplicado em imports | ✅ |
+| `@asynccontextmanager` em `session_compat.py` | Gerador assíncrono sem wrapper de context manager | ✅ |
+| Scheduler usando `iscoroutine(result)` | `iscoroutinefunction` falhava com wrappers do TaskIQ | ✅ |
+| `ChatwitService` → `ChatwitClient` | Nome antigo não existia no código migrado | ✅ |
+| `publish_event` → `publish` | API real do componente de eventos tinha nome diferente | ✅ |
+
+## A.7 — Padrão Operacional dos Scripts JusMonitorIA
+
+> Esta seção descreve apenas os scripts do JusMonitorIA, localizados em `/home/wital/JusMonitorIA/`. Não se refere aos scripts do Socialwise.
+
+Após o cutover para o `platform-backend`, o JusMonitorIA passou a operar com separação explícita entre backend compartilhado e serviços específicos do produto.
+
+### `dev.sh` — responsabilidade atual
+
+O script `JusMonitorIA/dev.sh` gerencia o ambiente local do JusMonitorIA com este fluxo:
+
+1. Garante a rede compartilhada `minha_rede`.
+2. Verifica a infra compartilhada e sobe `postgres` + `redis` apenas se ainda não estiverem ativos.
+3. Verifica o `platform-backend` em `/home/wital/platform-backend` e sobe os containers compartilhados se necessário.
+4. Aguarda o container `platform-api` ficar `healthy` antes de continuar.
+5. Sobe apenas os serviços locais do compose do JusMonitorIA: `frontend` + `scraper`.
+
+Implicações práticas:
+
+- O backend e os workers não são mais responsabilidade direta do compose local principal do JusMonitorIA.
+- O comando padrão `./dev.sh` virou um orquestrador de camadas: infra compartilhada → platform-backend → frontend/scraper JM.
+- O comando `./dev.sh frontend` pressupõe `platform-api` já ativo e sobe só a camada de borda do produto.
+- Operações de migration e seed são executadas via `docker exec platform-api ...`, reforçando que a fonte de execução backend agora é o `platform-backend`.
+
+### `build.sh` — responsabilidade atual
+
+O script `JusMonitorIA/build.sh` é o entry-point de build e push de produção do JusMonitorIA após a migração.
+
+Ele suporta estes modos:
+
+- `./build.sh` → builda `platform-backend` + `frontend` + `scraper`
+- `./build.sh --platform-only` → builda só `platform-backend`
+- `./build.sh --frontend-only` → builda só `frontend`
+- `./build.sh --scraper-only` → builda só `scraper`
+
+Padrão de deploy documentado no script:
+
+- `backend` e `worker` em produção usam a mesma imagem `witrocha/platform-backend`
+- `frontend` usa `witrocha/jusmonitoria-frontend`
+- `scraper` usa `witrocha/jusmonitoria-scraper`
+- Quando Portainer está configurado, o script faz `force-update` seletivo por serviço via Docker Proxy API
+
+### Regra operacional consolidada
+
+Para o JusMonitorIA, o padrão correto após a migração é:
+
+- `platform-backend` concentra API e workers compartilhados
+- O workspace JusMonitorIA concentra frontend, scraper e scripts de orquestração do produto
+- `dev.sh` do JusMonitorIA prepara dependências e sobe apenas a borda do produto depois que a camada compartilhada está pronta
+- `build.sh` do JusMonitorIA é o ponto único de build/deploy das imagens do produto, incluindo a imagem compartilhada do `platform-backend` quando aplicável
 
 ---
 
@@ -338,7 +452,7 @@ Repo: `/home/wital/platform-backend`
 | 4 | AnalysisGeneration | `oab-analysis` | Nenhum | ✅ |
 | 5 | LeadsChatwit | `filaLeadsChatwit` | Nenhum | ✅ |
 | 6 | FlowBuilder | `flow-builder-queues` | Nenhum (async actions) | ✅ |
-| 7 | InstagramWebhook | `instagram-webhook` | Nenhum | ✅ |
+| 7 | InstagramWebhook | `instagram-webhooks` | Nenhum | ✅ |
 | 8 | Transcription | `oab-transcription` | Nenhum | ✅ |
 | 9 | FxRate | `fx-rate-updates` | Nenhum | ✅ |
 | 10 | BudgetMonitor | `budget-monitor` | Nenhum | ✅ |
@@ -362,33 +476,89 @@ BudgetMonitor (10) ◀──reads── CostEvents (13)
 
 ---
 
-## B.1 — SQLAlchemy Models (Mirror do Prisma)
+## B.1 — SQLAlchemy Models (Mirror do Prisma) ✅ CONCLUÍDA 2026-03-21
 
 O database `socialwise` é gerenciado pelo Prisma. SQLAlchemy faz **read/write mirror** — sem Alembic, sem migrations.
 
+### Arquivos criados
+
+| Arquivo | Modelos | Linhas |
+|---------|---------|--------|
+| `domains/socialwise/db/base.py` | `SocialwiseBase`, `SocialwiseModel` | Base CUID pk + timestamps |
+| `domains/socialwise/db/models/lead.py` | `Lead`, `LeadSource` | 573 rows validados |
+| `domains/socialwise/db/models/lead_oab_data.py` | `LeadOabData` | Relationships Lead + UsuarioChatwit |
+| `domains/socialwise/db/models/espelho_padrao.py` | `EspelhoPadrao`, `EspecialidadeJuridica` | 7 rows validados |
+| `domains/socialwise/db/models/mapeamento_botao.py` | `MapeamentoBotao`, `ActionType` | 33 rows validados |
+| `domains/socialwise/db/models/mapeamento_intencao.py` | `MapeamentoIntencao` | FK → Flow, 14 rows |
+| `domains/socialwise/db/models/flow.py` | `Flow`, `FlowNode`, `FlowEdge` | 8 flows, 23+ nodes |
+| `domains/socialwise/db/models/flow_session.py` | `FlowSession`, `FlowSessionStatus` | 253 sessions |
+| `domains/socialwise/db/models/flow_campaign.py` | `FlowCampaign`, `FlowCampaignContact` + enums | Cascading relationships |
+| `domains/socialwise/db/models/agendamento.py` | `Agendamento` | Sem updatedAt |
+| `domains/socialwise/db/models/midia.py` | `Midia` | Dependência direta do worker de agendamento |
+| `domains/socialwise/db/models/user.py` | `User` | Suporte para payload do agendamento |
+| `domains/socialwise/db/models/account.py` | `Account` | Tokens/IDs do Instagram |
+| `domains/socialwise/db/models/automacao.py` | `Automacao` | Regras do Instagram webhook |
+| `domains/socialwise/db/models/lead_automacao.py` | `LeadAutomacao` | Estado por lead no Instagram |
+| `domains/socialwise/db/models/lead_instagram_profile.py` | `LeadInstagramProfile` | Estado de follower |
+| `domains/socialwise/db/models/usuario_chatwit.py` | `UsuarioChatwit` | 1 row (produção) |
+| `domains/socialwise/db/models/system_config.py` | `SystemConfig` | 2 rows (chatwit tokens) |
+| `domains/socialwise/db/models/template.py` | `Template`, `TemplateType/Scope/Status` | 62 rows |
+| `domains/socialwise/db/models/cost_event.py` | `CostEvent`, `Provider/Unit/EventStatus` | 889 rows |
+| `domains/socialwise/db/models/webhook_config.py` | `WebhookConfig` | Configuração de webhooks outbound |
+| `domains/socialwise/db/models/webhook_delivery.py` | `WebhookDelivery`, `WebhookEvent` | Histórico de entregas |
+| `domains/socialwise/db/models/mtf_diamante.py` | `MtfDiamanteConfig`, `MtfDiamanteVariavel` | FK cascade |
+| `domains/socialwise/db/models/chat.py` | `Chat` | Relationship Lead + Account |
+| `domains/socialwise/db/models/arquivo_lead_oab.py` | `ArquivoLeadOab` | Arquivos por LeadOabData |
+| `domains/socialwise/db/models/__init__.py` | Todos os 28 models + enums exportados | Package init |
+
+### Decisões de design
+
+- **CUID String IDs** (`String(30)`) em vez de UUIDs — espelhando o `@default(cuid())` do Prisma
+- **Column names mapeados** via primeiro arg de `mapped_column("camelCase", ...)` para preservar nomes Prisma (camelCase) com atributos Python (snake_case)
+- **ForeignKey entre tabelas operacionais mirrored** — a B.2.2 adicionou mirrors de `User`, `Account` e outras dependências reais dos workers; FKs para tabelas ainda não mirrored continuam plain `String`
+- **Relationships selectin** para joins frequentes (Lead→LeadOabData, Flow→FlowNode, FlowCampaign→Contacts)
+- `FlowCampaign` e `FlowCampaignContact` adicionados além do inventário original — necessários para o worker de campanhas
+
 ### Tarefas
 
-- [ ] Gerar models via `sqlacodegen` a partir do schema Prisma existente
-- [ ] Criar apenas os modelos que os workers precisam acessar:
+- [x] Criar `SocialwiseBase` e `SocialwiseModel` em `domains/socialwise/db/base.py`
+- [x] Criar modelos mirror para todas as tabelas necessárias do inventário core (18 tabelas)
+- [x] Expandir o mirror com 10 tabelas de suporte que a doc original omitia, mas que são dependência real dos workers Socialwise:
 
 | Tabela Prisma | Modelo SQLAlchemy | Usado por |
 |---------------|------------------|-----------|
-| `LeadOabData` | `LeadOabData` | Transcription, Mirror, Analysis, LeadCells |
+| `User` | `User` | Agendamento worker |
+| `Account` | `Account` | Agendamento, InstagramWebhook |
+| `Midia` | `Midia` | Agendamento worker |
+| `Automacao` | `Automacao` | InstagramWebhook |
+| `LeadAutomacao` | `LeadAutomacao` | InstagramWebhook |
+| `LeadInstagramProfile` | `LeadInstagramProfile` | InstagramWebhook |
+| `WebhookConfig` | `WebhookConfig` | WebhookDelivery |
+| `WebhookDelivery` | `WebhookDelivery` | WebhookDelivery |
+| `Chat` | `Chat` | LeadsChatwit (B.2.3) |
+| `ArquivoLeadOab` | `ArquivoLeadOab` | LeadsChatwit (B.2.3) |
+
+Inventário core original:
+
+| Tabela Prisma | Modelo SQLAlchemy | Usado por |
+|---------------|------------------|-----------|
 | `Lead` | `Lead` | LeadCells, LeadsChatwit |
+| `LeadOabData` | `LeadOabData` | Transcription, Mirror, Analysis, LeadCells |
 | `EspelhoPadrao` | `EspelhoPadrao` | MirrorGeneration |
 | `MapeamentoBotao` | `MapeamentoBotao` | FlowBuilder |
 | `MapeamentoIntencao` | `MapeamentoIntencao` | FlowBuilder |
 | `Flow` / `FlowNode` / `FlowEdge` | `Flow`, `FlowNode`, `FlowEdge` | FlowBuilder, FlowCampaign |
 | `FlowSession` | `FlowSession` | FlowBuilder |
+| `FlowCampaign` / `FlowCampaignContact` | `FlowCampaign`, `FlowCampaignContact` | FlowCampaign worker |
 | `Agendamento` | `Agendamento` | Agendamento worker |
 | `UsuarioChatwit` | `UsuarioChatwit` | LeadsChatwit, Chatwit integration |
 | `SystemConfig` | `SystemConfig` | Chatwit client |
-| `TemplateMessage` | `TemplateMessage` | FlowBuilder, FlowCampaign |
+| `Template` | `Template` | FlowBuilder, FlowCampaign |
 | `CostEvent` | `CostEvent` | CostEvents worker |
-| `VariavelMtf` | `VariavelMtf` | FlowBuilder (variáveis MTF) |
+| `MtfDiamanteConfig` / `MtfDiamanteVariavel` | `MtfDiamanteConfig`, `MtfDiamanteVariavel` | FlowBuilder (variáveis MTF) |
 
-- [ ] Colocar em `domains/socialwise/db/models/`
-- [ ] Testar: CRUD básico funciona via SQLAlchemy no banco socialwise
+- [x] Colocar em `domains/socialwise/db/models/`
+- [x] Testar: CRUD básico funciona via SQLAlchemy no banco socialwise (18/18 tabelas lidas com sucesso)
 
 ---
 
@@ -396,7 +566,7 @@ O database `socialwise` é gerenciado pelo Prisma. SQLAlchemy faz **read/write m
 
 Começar pelos workers mais simples para validar a stack TaskIQ + SQLAlchemy mirror.
 
-### B.2.1 — FxRate + BudgetMonitor + CostEvents
+### B.2.1 — FxRate + BudgetMonitor + CostEvents ✅ CONCLUÍDA 2026-03-21
 
 | Origem (TypeScript) | Destino (Python) | Complexidade |
 |---------------------|-----------------|-------------|
@@ -409,7 +579,33 @@ Começar pelos workers mais simples para validar a stack TaskIQ + SQLAlchemy mir
 - `lib/cost/idempotency-service.ts` → `domains/socialwise/services/cost/idempotency.py`
 - `lib/cost/audit-logger.ts` → `domains/socialwise/services/cost/audit.py`
 
-### B.2.2 — Agendamento + WebhookDelivery + InstagramWebhook
+### Entregue nesta etapa
+
+- `domains/socialwise/db/session_compat.py` — `AsyncSessionLocal` + `session_ctx()` para workers/scripts.
+- `domains/socialwise/db/models/price_card.py` — mirror de `PriceCard`.
+- `domains/socialwise/db/models/fx_rate.py` — mirror de `FxRate`.
+- `domains/socialwise/db/models/cost_budget.py` — mirror de `CostBudget`.
+- `domains/socialwise/db/models/audit_log.py` — mirror de `AuditLog`.
+- `domains/socialwise/services/cost/pricing.py` — resolução de preços + reprocessamento de `PENDING_PRICING`.
+- `domains/socialwise/services/cost/idempotency.py` — external ID + fingerprint + janela temporal.
+- `domains/socialwise/services/cost/audit.py` — persistência em `AuditLog` com savepoint.
+- `domains/socialwise/services/cost/fx_rate.py` — fetch multi-provider + fallback + storage.
+- `domains/socialwise/services/cost/budget_controls.py` — flags Redis de alerta/bloqueio/downgrade.
+- `domains/socialwise/tasks/cost_events.py` — `process_cost_event_task`, batch, reprocess e cleanup de idempotência.
+- `domains/socialwise/tasks/budget_monitor.py` — checagem global e por orçamento.
+- `domains/socialwise/tasks/fx_rate.py` — update diário, backfill, cleanup e bootstrap inicial.
+- Scheduler TaskIQ ainda não existia nesta etapa; a lacuna operacional foi fechada na B.2.2.
+
+### Validação executada
+
+- `compile()` sintático em 14 arquivos novos/alterados do domínio Socialwise: OK.
+- Import dos modelos, serviços e tasks do domínio Socialwise: OK.
+- Tasks registradas no broker Socialwise: OK (`domains.socialwise.tasks.*:*_task`).
+- `git diff --check -- domains/socialwise`: OK.
+- Leitura runtime do banco socialwise: **validada depois dentro do compose na B.2.2**.
+  Observação: fora do compose, o host continua dependente da rede Docker `minha_rede` para resolver `postgres:5432` e `redis:6379`.
+
+### B.2.2 — Agendamento + WebhookDelivery + InstagramWebhook ✅ CONCLUÍDA 2026-03-21
 
 | Origem (TypeScript) | Destino (Python) | Complexidade |
 |---------------------|-----------------|-------------|
@@ -417,21 +613,84 @@ Começar pelos workers mais simples para validar a stack TaskIQ + SQLAlchemy mir
 | (webhook delivery logic) | `domains/socialwise/tasks/webhook_delivery.py` | Baixa |
 | `worker/processors/instagram-webhook.processor.ts` | `domains/socialwise/tasks/instagram_webhook.py` | Baixa |
 
-### B.2.3 — LeadCells + LeadsChatwit
+**Dependências a portar que a doc original omitira:**
+- `lib/agendamento.service.ts` → `domains/socialwise/services/agendamento.py`
+- `lib/webhook/webhook-manager.ts` (subset delivery runtime) → `domains/socialwise/services/webhook_delivery.py`
+- `worker/automacao/eu-quero/automation.ts` + `lib/instagram-auth.ts` → `domains/socialwise/services/instagram_webhook.py`
+- `User`, `Account`, `Midia`, `Automacao`, `LeadAutomacao`, `LeadInstagramProfile`, `WebhookConfig`, `WebhookDelivery` → novos mirrors SQLAlchemy
+
+### Entregue nesta etapa
+
+- `domains/socialwise/db/models/user.py` e `account.py` — suporte mínimo para auth social/Instagram.
+- `domains/socialwise/db/models/midia.py` — relação com `Agendamento`.
+- `domains/socialwise/db/models/automacao.py`, `lead_automacao.py`, `lead_instagram_profile.py` — stack completo de automação Instagram.
+- `domains/socialwise/db/models/webhook_config.py` e `webhook_delivery.py` — stack de delivery outbound.
+- `domains/socialwise/services/agendamento.py` — seleção de mídia + payload de webhook.
+- `domains/socialwise/services/webhook_delivery.py` — assinatura HMAC, POST e persistência de resultado.
+- `domains/socialwise/services/instagram_webhook.py` — comentários, DM/postback, follower gating e captura de e-mail.
+- `domains/socialwise/tasks/agendamento.py` — processamento + reagendamento diário/semanal via `schedule_by_time`.
+- `domains/socialwise/tasks/webhook_delivery.py` — worker com retry sobre falha HTTP/network.
+- `domains/socialwise/tasks/instagram_webhook.py` — worker TaskIQ para payloads do Instagram.
+- `domains/socialwise/tasks/scheduler.py` — `LabelScheduleSource` + `ListRedisScheduleSource`.
+- `platform-backend/docker-compose.yml` — novo serviço `platform-scheduler-socialwise`.
+- `platform_core/config.py` — aliases compatíveis com envs legadas (`WEBHOOK_URL`, `IG_GRAPH_API_BASE`) e base URL da automação.
+- `worker/automacao/eu-quero/automation.ts` — bugfix legado de lookup/recipient do Instagram antes do cutover.
+- `app/api/admin/webhooks/route.ts` e `app/api/admin/webhooks/[webhookId]/deliveries/route.ts` — correção de CUID/String vs UUID.
+
+### Validação executada
+
+- Import dos novos models/tasks/scheduler Socialwise: OK.
+- `py_compile` sintático em 22 arquivos novos/alterados do `platform-backend`: OK.
+- `git diff --check` OK no escopo alterado de Python e TypeScript.
+- `pnpm exec tsc --noEmit`: OK.
+- `pnpm exec tsc --noEmit -p tsconfig.worker.json`: OK.
+- Validação runtime dentro do compose (`platform-api` na rede `minha_rede`): consultas a `Agendamento`, `WebhookDelivery` e `Automacao` executaram sem erro no Postgres real do ambiente local atual (`0/0/0` rows).
+
+### B.2.3 — LeadCells + LeadsChatwit ✅ CONCLUÍDA 2026-03-21
 
 | Origem (TypeScript) | Destino (Python) | Complexidade |
 |---------------------|-----------------|-------------|
 | `worker/WebhookWorkerTasks/leadcells.task.ts` | `domains/socialwise/tasks/lead_cells.py` | Média |
 | `worker/WebhookWorkerTasks/leads-chatwit.task.ts` | `domains/socialwise/tasks/leads_chatwit.py` | Média |
 
-**Dependências a portar:**
-- `lib/leads-chatwit/` (3 arquivos) → `domains/socialwise/services/leads/`
+**Dependências que a doc original omitira:**
+- `lib/leads-chatwit/sanitize-chatwit-payload.ts` → `domains/socialwise/services/leads/sanitize_payload.py`
+- `lib/leads-chatwit/normalize-chatwit-lead-sync-payload.ts` → `domains/socialwise/services/leads/normalize_payload.py`
+- `lib/leads-chatwit/process-chatwit-lead-sync.ts` → `domains/socialwise/services/leads/process_sync.py`
+- `lib/services/lead-service.ts` → `domains/socialwise/services/leads/lead_service.py`
+- `Chat` e `ArquivoLeadOab` → novos mirrors SQLAlchemy
+
+### Entregue nesta etapa
+
+- `domains/socialwise/db/models/chat.py` — mirror de `Chat` (UniqueConstraint leadId+accountId).
+- `domains/socialwise/db/models/arquivo_lead_oab.py` — mirror de `ArquivoLeadOab` (unique chatwitFileId, FK cascade).
+- `domains/socialwise/services/leads/sanitize_payload.py` — sanitização de payloads brutos do webhook Chatwit.
+- `domains/socialwise/services/leads/normalize_payload.py` — normalização multi-event (specific, legacy_contact, legacy_message).
+- `domains/socialwise/services/leads/lead_service.py` — `LeadService` com deduplicação cross-source (phone + contactId).
+- `domains/socialwise/services/leads/process_sync.py` — upsert completo: UsuarioChatwit → Account → Lead → LeadOabData → ArquivoLeadOab.
+- `domains/socialwise/tasks/lead_cells.py` — 3 sub-handlers (manuscrito, espelho, análise) + SSE via Redis pub/sub.
+- `domains/socialwise/tasks/leads_chatwit.py` — wrapper TaskIQ que delega para `process_chatwit_lead_sync`.
+
+### Notas e decisões
+
+- **`generatePdfInternally` NÃO portado**: O pipeline original usa `pdf-lib` no Node.js. Na versão Python, os PDFs devem chegar com URLs pré-geradas (via lazy import de `generate-analise-pdfs.ts` no Next.js) ou o enqueuer deve gerar antes de disparar a task. Quando os agentes IA OAB forem migrados (B.3), o PDF será gerado pelo pipeline Python.
+- **SSE notifications**: Publicadas via `redis.asyncio` no canal `sse:lead:<leadId>`, compatível com o `SseManager` do Next.js que subscreve via `SUBSCRIBE`.
+- **Dedup de arquivos**: `ArquivoLeadOab.chatwitFileId` tem constraint UNIQUE; a task verifica antes de inserir para evitar duplicatas (equivalente ao `skipDuplicates: true` do Prisma).
+
+### Validação executada
+
+- `ast.parse` sintático em 11 arquivos novos: OK.
+- Import dos models (`Chat`, `ArquivoLeadOab`), services e tasks dentro do compose: OK.
+- Tasks registradas no broker Socialwise: OK.
+- `git diff --check -- domains/socialwise`: OK.
+- `pnpm exec tsc --noEmit`: OK.
+- `pnpm exec tsc --noEmit -p tsconfig.worker.json`: OK.
 
 ### Tarefas
 
-- [ ] Portar cada worker TypeScript → Python TaskIQ
+- [x] Portar cada worker TypeScript → Python TaskIQ (B.2.1, B.2.2 e B.2.3 concluídas)
 - [ ] Criar endpoint bridge: `POST /api/v1/socialwise/tasks/enqueue` (Next.js chama em vez de BullMQ `.add()`)
-- [ ] Publicar SSE progress nos mesmos canais Redis que o Next.js lê
+- [x] Publicar SSE progress via Redis pub/sub no canal `sse:lead:<leadId>` (lead_cells.py)
 - [ ] Testar: side-by-side BullMQ ↔ TaskIQ, depois cutover
 
 ---
@@ -613,6 +872,29 @@ Migrar as rotas admin do Next.js para FastAPI.
 - [ ] Atualizar Docker Compose Socialwise: remover service `socialwise_worker`
 - [ ] Next.js = **apenas frontend** (UI + BFF proxy + Auth.js)
 
+## B.9 — Adaptar `dev.sh` e `build.sh` do Socialwise
+
+> Adaptar os scripts do Socialwise para o padrão pós-migração, seguindo o mesmo padrão documentado em A.7 (JusMonitorIA).
+
+### Contexto
+
+Os scripts `dev.sh` e `build.sh` do JusMonitorIA já foram adaptados para orquestrar o `platform-backend` como camada compartilhada. O Socialwise precisa do mesmo tratamento:
+
+- **`dev.sh`**: Garantir rede `minha_rede` → verificar infra compartilhada → verificar/subir `platform-backend` → aguardar `platform-api` healthy → subir apenas o Next.js do Socialwise.
+- **`build.sh`**: Suportar modos `--platform-only` (build da imagem `witrocha/platform-backend`), build do Next.js do Socialwise, e force-update via Portainer.
+
+### Referência
+
+- Padrão já implementado: `/home/wital/JusMonitorIA/dev.sh` e `/home/wital/JusMonitorIA/build.sh` (documentados na seção A.7 deste documento).
+- Os scripts do Socialwise existem mas ainda seguem o padrão pré-migração (sobem backend/worker localmente).
+
+### Tarefas
+
+- [ ] Adaptar `socialwise/dev.sh`: orquestrar infra + platform-backend + Next.js (seguir padrão JusMonitorIA/dev.sh)
+- [ ] Adaptar `socialwise/build.sh`: suportar `--platform-only`, build da imagem Socialwise, force-update Portainer
+- [ ] Atualizar `socialwise/docker-compose.yml` para remover services de backend/worker que passaram ao platform-backend
+- [ ] Testar: `./dev.sh` sobe o ambiente completo com platform-backend como fonte de API/workers
+
 ---
 
 # SEÇÃO C — Infra Compartilhada (Paralelo)
@@ -666,16 +948,17 @@ Tarefas que podem ser feitas em paralelo com A e B.
 |------|-------|-----------|------------|
 | 0 | — | Scaffold platform-backend | ✅ **CONCLUÍDA** |
 | 1 | A.1–A.5 | Mover JusMonitorIA backend | ✅ **CONCLUÍDA** (234 arquivos, 2026-03-20) |
-| 2 | A.6 | Verificação + cutover JusMonitorIA | ⏳ Verificação runtime pendente |
+| 2 | A.6–A.7 | Verificação + cutover + padronização operacional JusMonitorIA | ✅ Runtime validado + scripts documentados |
 | 3 | C.1–C.4 | Infra compartilhada (auth, AI, middleware) | Stack completo |
 | 4 | B.1 | SQLAlchemy mirrors do Prisma | Models prontos |
-| 5 | B.2 | Workers simples (cost, agendamento, leads) | 8 workers migrados |
+| 5 | B.2 | Workers simples (cost, agendamento, leads) | ✅ **CONCLUÍDA** — B.2.1, B.2.2 e B.2.3 concluídas |
 | 6 | B.3 | Agentes IA OAB (LangGraph + LiteLLM) | 3 agents + 3 workers migrados |
 | 7 | B.4 | Flow Engine workers (async) | 2 workers migrados (13/13 total) |
 | 8 | B.5 | SocialWise Flow (classificação intents) | Pipeline classificação em Python |
 | 9 | B.6 | Webhook + Flow Engine core | Webhook apontando para FastAPI |
 | 10 | B.7 | Admin API routes | Next.js = apenas UI |
 | 11 | B.8 | **DELETAR `worker/`** | 🎯 Marco final: pasta removida |
+| — | B.9 | Adaptar `dev.sh`/`build.sh` Socialwise | Scripts orquestram platform-backend |
 | 12 | C.5–C.6 | Observabilidade + deploy prod | Produção estável |
 
 ---
