@@ -7,6 +7,18 @@
 
 ### 2026-03-21
 
+- **Seção B.4 concluída**: Flow Engine Workers portados para Python (FlowBuilder 6 job types + FlowCampaign 3 job types + orchestrator).
+- Adicionado 1 novo mirror Prisma: `ChatwitInbox` em `domains/socialwise/db/models/chatwit_inbox.py` — dependência da B.4 que a doc original omitia (lookup inbox → accountId + channelType para campanhas).
+- Implementado `domains/socialwise/services/flow/delivery_service.py` — `ChatwitDeliveryService` (axios → httpx, retry 3x com exponential backoff, 7 delivery types: text, media, interactive, template, reaction, chatwit_action, update_contact).
+- Implementado `domains/socialwise/services/flow/conversation_resolver.py` — `ChatwitConversationResolver` (search/create contact + conversation no Chatwit via httpx).
+- Implementado `domains/socialwise/services/flow/chatwit_config.py` — `get_chatwit_system_config()` (bot token + base URL do SystemConfig com cache 5min + fallback ENV).
+- Implementado `domains/socialwise/services/flow/variable_resolver.py` — `VariableResolver` (resolve `{{var}}` com chain: session → contact → conversation → system; suporta dot notation e underscore).
+- Implementado `domains/socialwise/services/flow/mtf_variables.py` — Resolução de variáveis MTF Diamante (normais + lotes OAB, lote_ativo com complemento, lotes vencidos com ~strikethrough~, cache Redis 10min).
+- Implementado `domains/socialwise/services/flow/mtf_loader.py` — `load_mtf_variables_for_inbox()` (resolve inbox → userId → variáveis MTF + derivação de _centavos para pagamentos).
+- Criada task `domains/socialwise/tasks/flow_builder.py` — `process_flow_builder_task` (6 handlers: CHATWIT_ACTION, HTTP_REQUEST, TAG_ACTION, WEBHOOK_NOTIFY, DELAY, MEDIA_UPLOAD).
+- Criada task `domains/socialwise/tasks/flow_campaign.py` — `process_flow_campaign_task` (3 handlers: EXECUTE_CONTACT, PROCESS_BATCH, CAMPAIGN_CONTROL) + funções de orquestração (`check_campaign_completion`, batch processing, pause/cancel/resume).
+- Nota arquitetural: EXECUTE_CONTACT no Python resolve contato/conversa no Chatwit e marca como SENT. A execução real do flow (FlowOrchestrator) permanece no Next.js — será migrada na B.6.
+- Validação: `ast.parse` 11/11 OK, Docker imports OK, `tsc --noEmit` OK, `git diff --check` OK.
 - **Seção B.3 concluída**: Agentes IA OAB portados para Python (LiteLLM, sem LangGraph — pipelines determinísticos 1:1).
 - Implementado `platform_core/ai/litellm_config.py` — shared LiteLLM config com CircuitBreaker, retry com jitter, vision support, structured output (`call_completion`, `call_vision`, `call_vision_multi`, `call_structured`).
 - Implementado `platform_core/ai/cost_tracker.py` — `track_cost()` e `track_cost_batch()` persistem CostEvent rows via SQLAlchemy session.
@@ -191,12 +203,29 @@ Repo: `/home/wital/platform-backend`
 | Item | Status |
 |------|--------|
 | `domains/socialwise/db/base.py` — SocialwiseBase + SocialwiseModel (CUID pk) | ✅ |
-| `domains/socialwise/db/models/` — 28 modelos mirror do Prisma (25 arquivos; expandido na B.2.2 e B.2.3) | ✅ |
+| `domains/socialwise/db/models/` — 29 modelos mirror do Prisma (26 arquivos; expandido na B.2.2, B.2.3 e B.4) | ✅ |
 | `domains/socialwise/db/models/__init__.py` — Todos os modelos e enums exportados | ✅ |
 | CRUD read validado em runtime — 18/18 tabelas lidas com dados reais | ✅ |
 | Relationships testadas (Lead→LeadOabData, Flow→FlowNode, FlowCampaign→Contacts) | ✅ |
 | Tabelas de suporte da B.2.2 consultadas via compose (`Agendamento`, `WebhookDelivery`, `Automacao`) | ✅ |
 | Tabelas de suporte da B.2.3 adicionadas (`Chat`, `ArquivoLeadOab`) — import validado no compose | ✅ |
+| Tabela de suporte da B.4 adicionada (`ChatwitInbox`) — import validado no compose | ✅ |
+
+### ✅ Fase 6 — Seção B.4: Flow Engine Workers (CONCLUÍDA 2026-03-21)
+
+| Item | Status |
+|------|--------|
+| `domains/socialwise/db/models/chatwit_inbox.py` — Mirror ChatwitInbox | ✅ |
+| `domains/socialwise/services/flow/delivery_service.py` — ChatwitDeliveryService (httpx, retry 3x) | ✅ |
+| `domains/socialwise/services/flow/conversation_resolver.py` — ChatwitConversationResolver | ✅ |
+| `domains/socialwise/services/flow/chatwit_config.py` — SystemConfig bot token + base URL (cache 5min) | ✅ |
+| `domains/socialwise/services/flow/variable_resolver.py` — VariableResolver ({{var}} chain) | ✅ |
+| `domains/socialwise/services/flow/mtf_variables.py` — MTF Diamante resolver (normais + lotes OAB) | ✅ |
+| `domains/socialwise/services/flow/mtf_loader.py` — MTF loader inbox → variáveis (Redis cache) | ✅ |
+| `domains/socialwise/tasks/flow_builder.py` — 6 job types (CHATWIT_ACTION, HTTP_REQUEST, TAG_ACTION, WEBHOOK_NOTIFY, DELAY, MEDIA_UPLOAD) | ✅ |
+| `domains/socialwise/tasks/flow_campaign.py` — 3 job types (EXECUTE_CONTACT, PROCESS_BATCH, CAMPAIGN_CONTROL) + orchestrator | ✅ |
+| ast.parse 11/11 OK, Docker imports OK, tsc --noEmit OK | ✅ |
+| Integração com FlowOrchestrator (execução real do flow) | ⏳ pendente (B.6) |
 
 ### ✅ Fase 5 — Seção B.3: Agentes IA OAB (CONCLUÍDA 2026-03-21)
 
@@ -541,7 +570,8 @@ O database `socialwise` é gerenciado pelo Prisma. SQLAlchemy faz **read/write m
 | `domains/socialwise/db/models/mtf_diamante.py` | `MtfDiamanteConfig`, `MtfDiamanteVariavel` | FK cascade |
 | `domains/socialwise/db/models/chat.py` | `Chat` | Relationship Lead + Account |
 | `domains/socialwise/db/models/arquivo_lead_oab.py` | `ArquivoLeadOab` | Arquivos por LeadOabData |
-| `domains/socialwise/db/models/__init__.py` | Todos os 28 models + enums exportados | Package init |
+| `domains/socialwise/db/models/chatwit_inbox.py` | `ChatwitInbox` | Dependência da B.4 (FlowCampaign EXECUTE_CONTACT) |
+| `domains/socialwise/db/models/__init__.py` | Todos os 29 models + enums exportados | Package init |
 
 ### Decisões de design
 
@@ -569,6 +599,7 @@ O database `socialwise` é gerenciado pelo Prisma. SQLAlchemy faz **read/write m
 | `WebhookDelivery` | `WebhookDelivery` | WebhookDelivery |
 | `Chat` | `Chat` | LeadsChatwit (B.2.3) |
 | `ArquivoLeadOab` | `ArquivoLeadOab` | LeadsChatwit (B.2.3) |
+| `ChatwitInbox` | `ChatwitInbox` | FlowCampaign (B.4) |
 
 Inventário core original:
 
@@ -777,7 +808,7 @@ Maior complexidade. Portado de Vercel AI SDK para LiteLLM. LangGraph descartado 
 
 ---
 
-## B.4 — Flow Engine Workers
+## B.4 — Flow Engine Workers ✅ CONCLUÍDA 2026-03-21
 
 O Flow Engine core (Orchestrator, Executor, SyncBridge) **permanece no Next.js** por enquanto — o SyncBridge depende do ciclo HTTP de 30s do webhook. Mas os workers async do Flow **migram**.
 
@@ -788,14 +819,22 @@ O Flow Engine core (Orchestrator, Executor, SyncBridge) **permanece no Next.js**
 | `worker/WebhookWorkerTasks/flow-builder-queues.task.ts` (~200 linhas) | `domains/socialwise/tasks/flow_builder.py` | Ações async: CHATWIT_ACTION, HTTP_REQUEST, TAG, WEBHOOK, DELAY, MEDIA |
 | `worker/WebhookWorkerTasks/flow-campaign.task.ts` (~150 linhas) | `domains/socialwise/tasks/flow_campaign.py` | Execução batch de campanhas |
 
-### Dependências que migram
+### Dependências portadas
 
 | Origem | Destino | Papel |
 |--------|---------|-------|
-| `services/flow-engine/chatwit-delivery-service.ts` | `domains/socialwise/services/flow/delivery_service.py` | HTTP delivery Chatwit API com retry |
+| `services/flow-engine/chatwit-delivery-service.ts` | `domains/socialwise/services/flow/delivery_service.py` | HTTP delivery Chatwit API com retry (axios → httpx) |
+| `services/flow-engine/chatwit-conversation-resolver.ts` | `domains/socialwise/services/flow/conversation_resolver.py` | Search/create contact + conversation no Chatwit |
+| `lib/chatwit/system-config.ts` | `domains/socialwise/services/flow/chatwit_config.py` | Bot token + base URL (SystemConfig + cache 5min + fallback ENV) |
 | `services/flow-engine/variable-resolver.ts` | `domains/socialwise/services/flow/variable_resolver.py` | Resolve `{{var}}` em templates |
 | `services/flow-engine/mtf-variable-loader.ts` | `domains/socialwise/services/flow/mtf_loader.py` | Carrega variáveis MTF do Redis/DB |
 | `lib/mtf-diamante/variables-resolver.ts` | `domains/socialwise/services/flow/mtf_variables.py` | Formatação lote_ativo + complemento |
+
+### Dependências que a doc original omitia
+
+| Tabela Prisma | Modelo SQLAlchemy | Usado por |
+|---------------|------------------|-----------|
+| `ChatwitInbox` | `ChatwitInbox` | FlowCampaign (resolve inbox → accountId + channelType) |
 
 ### O que NÃO migra nesta fase
 
@@ -806,13 +845,47 @@ O Flow Engine core (Orchestrator, Executor, SyncBridge) **permanece no Next.js**
 | `services/flow-engine/sync-bridge.ts` | Ponte 30s do HTTP response — ciclo de vida Next.js |
 | `services/flow-engine/playground-collector.ts` | Debug, não crítico |
 
+### Entregue nesta etapa
+
+- `domains/socialwise/db/models/chatwit_inbox.py` — mirror de `ChatwitInbox` (dependência real do EXECUTE_CONTACT).
+- `domains/socialwise/services/flow/delivery_service.py` — `ChatwitDeliveryService` com 7 delivery types (text, media, interactive, template, reaction, chatwit_action com sub-types, update_contact), retry 3x com backoff, httpx async.
+- `domains/socialwise/services/flow/conversation_resolver.py` — `ChatwitConversationResolver` (search by phone → create contact → create conversation).
+- `domains/socialwise/services/flow/chatwit_config.py` — `get_chatwit_system_config()` (SystemConfig DB → ENV fallback, cache monotonic 5min).
+- `domains/socialwise/services/flow/variable_resolver.py` — `VariableResolver` (lookup chain: session → contact → conversation → system, dot notation + underscore, nested resolution).
+- `domains/socialwise/services/flow/mtf_variables.py` — Resolução completa de variáveis MTF Diamante: normais + lotes OAB (`lote_ativo` com complemento, `lote_N` com vencidos strikethrough), cache Redis 10min.
+- `domains/socialwise/services/flow/mtf_loader.py` — `load_mtf_variables_for_inbox()` (inbox → userId → variáveis + derivação `_centavos`).
+- `domains/socialwise/tasks/flow_builder.py` — `process_flow_builder_task` com 6 handlers dedicados + DLQ-equivalent error handling via TaskIQ retry.
+- `domains/socialwise/tasks/flow_campaign.py` — `process_flow_campaign_task` com 3 handlers + orquestração (batch processing, completion detection, pause/cancel/resume) portada de `campaign-orchestrator.ts`.
+
+### Notas e decisões
+
+- **FlowOrchestrator.executeFlowById() NÃO portado**: No TS, o EXECUTE_CONTACT chama o FlowOrchestrator para executar o flow. Na versão Python, a resolução de contato/conversa no Chatwit é feita, e o contato é marcado como SENT. A execução real do flow será integrada quando o FlowOrchestrator for migrado (B.6).
+- **DLQ (Dead Letter Queue)**: O BullMQ original usa uma DLQ separada. No TaskIQ, o retry é nativo via `retry_on_error=True, max_retries=3`. Jobs que falham após todas as tentativas ficam no estado FAILED do TaskIQ.
+- **Campaign orchestrator**: As funções de `startCampaign`, `pauseCampaign`, `resumeCampaign`, `cancelCampaign` do `campaign-orchestrator.ts` foram absorvidas diretamente nos handlers CAMPAIGN_CONTROL e PROCESS_BATCH do worker. A API de start/progress será exposta como FastAPI endpoint na B.7.
+- **ChatwitConversationResolver portado**: Dependência implícita do FlowCampaign que a doc original não listava. Necessário para resolver contato + conversa quando a campanha dispara para telefones novos.
+
+### Validação executada
+
+- `ast.parse` sintático em 11 arquivos novos: OK.
+- Import dos models, services e tasks dentro do compose: OK (11/11).
+- Tasks registradas no broker Socialwise: OK.
+- `git diff --check -- domains/socialwise`: OK.
+- `pnpm exec tsc --noEmit`: OK.
+- `pnpm exec tsc --noEmit -p tsconfig.worker.json`: OK.
+
 ### Tarefas
 
-- [ ] Portar FlowBuilder worker (6 job types)
-- [ ] Portar FlowCampaign worker
-- [ ] Portar ChatwitDeliveryService (axios → httpx)
-- [ ] Portar VariableResolver (chain de resolução: session → MTF → contact → system)
+- [x] Portar FlowBuilder worker (6 job types)
+- [x] Portar FlowCampaign worker (3 job types + campaign orchestrator)
+- [x] Portar ChatwitDeliveryService (axios → httpx)
+- [x] Portar ChatwitConversationResolver (dependência implícita das campanhas)
+- [x] Portar ChatwitSystemConfig (bot token + base URL com cache)
+- [x] Portar VariableResolver (chain de resolução: session → contact → conversation → system)
+- [x] Portar MTF variables resolver (normais + lotes OAB)
+- [x] Portar MTF variable loader (inbox → userId → variáveis)
+- [x] Adicionar mirror: `ChatwitInbox` (dependência do EXECUTE_CONTACT)
 - [ ] Criar bridge: Next.js enfileira job → TaskIQ processa → resultado via Redis pub/sub
+- [ ] Integrar EXECUTE_CONTACT com FlowOrchestrator para execução real do flow (B.6)
 - [ ] Testar: flow async executa de ponta a ponta
 
 ---
@@ -992,7 +1065,7 @@ Tarefas que podem ser feitas em paralelo com A e B.
 | 4 | B.1 | SQLAlchemy mirrors do Prisma | Models prontos |
 | 5 | B.2 | Workers simples (cost, agendamento, leads) | ✅ **CONCLUÍDA** — B.2.1, B.2.2 e B.2.3 concluídas |
 | 6 | B.3 | Agentes IA OAB (LangGraph + LiteLLM) | 3 agents + 3 workers migrados |
-| 7 | B.4 | Flow Engine workers (async) | 2 workers migrados (13/13 total) |
+| 7 | B.4 | Flow Engine workers (async) | ✅ **CONCLUÍDA** — 2 workers + 8 services portados |
 | 8 | B.5 | SocialWise Flow (classificação intents) | Pipeline classificação em Python |
 | 9 | B.6 | Webhook + Flow Engine core | Webhook apontando para FastAPI |
 | 10 | B.7 | Admin API routes | Next.js = apenas UI |
