@@ -35,6 +35,7 @@ from domains.socialwise.db.models.flow_campaign import (
     FlowCampaignContactStatus,
     FlowCampaignStatus,
 )
+from domains.socialwise.db.models.inbox_flow_canvas import InboxFlowCanvas
 from domains.socialwise.db.models.flow_session import FlowSession, FlowSessionStatus
 from domains.socialwise.db.models.interactive_content import (
     ActionCtaUrl,
@@ -106,6 +107,7 @@ __all__ = [
     "Flow",
     "FlowNode",
     "FlowEdge",
+    "InboxFlowCanvas",
     "FlowSession",
     "FlowSessionStatus",
     "FlowCampaign",
