@@ -7,6 +7,17 @@
 
 ### 2026-03-21
 
+- **Seção B.3 concluída**: Agentes IA OAB portados para Python (LiteLLM, sem LangGraph — pipelines determinísticos 1:1).
+- Implementado `platform_core/ai/litellm_config.py` — shared LiteLLM config com CircuitBreaker, retry com jitter, vision support, structured output (`call_completion`, `call_vision`, `call_vision_multi`, `call_structured`).
+- Implementado `platform_core/ai/cost_tracker.py` — `track_cost()` e `track_cost_batch()` persistem CostEvent rows via SQLAlchemy session.
+- Adicionados 2 novos mirrors Prisma: `AiAgentBlueprint` e `AiAssistant` em `domains/socialwise/db/models/`.
+- Portados 6 módulos de suporte em `domains/socialwise/services/oab_eval/`: `operation_control.py` (Redis cancel/SSE), `runtime_policy.py` (timeout/token budget), `rubric_scoring.py` (score sanitization), `blueprint_config.py` (4-tier config resolution).
+- Portados 3 agentes determinísticos: `transcription_agent.py` (OCR 3-level fallback, concurrent pages, segment split/organize), `mirror_generator.py` (vision extraction + rubric reconciliation), `analysis_agent.py` (comparative analysis + deterministic gabarito injection).
+- Criadas 3 tasks TaskIQ: `process_transcription_task` (SSE throttle 800ms, batch cost events), `process_mirror_generation_task`, `process_analysis_generation_task`.
+- Decisão arquitetural: LangGraph/ReAct **NÃO usado** — os workflows OAB são pipelines determinísticos bem definidos, portados 1:1 como funções async. Vision client unificado absorvido pelo LiteLLM nativo.
+- `ai-retry-fallback.ts` absorvido pelo LiteLLM fallback nativo + `with_retry()` com jitter em `litellm_config.py`.
+- `unified-vision-client.ts` absorvido: LiteLLM suporta vision nativamente via content parts `image_url`.
+- Validação: `ast.parse` 16/16 OK, imports Docker OK, lógica (rubric scoring, runtime policy, operation control) OK, tsc --noEmit OK, git diff --check OK.
 - **Seção B.2.3 concluída**: `LeadCells` e `LeadsChatwit` portados para TaskIQ em `domains/socialwise/tasks/`.
 - Adicionados 2 mirrors Prisma que a documentação original omitia: `Chat` e `ArquivoLeadOab`.
 - Portados 4 serviços de suporte em Python em `domains/socialwise/services/leads/`: `sanitize_payload.py`, `normalize_payload.py`, `lead_service.py` e `process_sync.py`.
@@ -77,7 +88,7 @@
 │                        └─────────────────────────────┘  │
 │                                                         │
 │  Jobs: TaskIQ (brokers separados por domínio)           │
-│  IA: LangGraph (workflows) + LiteLLM (multi-modelo)    │
+│  IA: LiteLLM (multi-modelo) + pipelines determinísticos │
 │  DB: SQLAlchemy 2.0 async + Alembic                    │
 └───────────┬──────────────┬───────────────┬──────────────┘
             ▼              ▼               ▼
@@ -97,7 +108,7 @@
 | Frontend web | Next.js 16 (dois apps separados) |
 | Backend único | **FastAPI** — API principal, fonte da verdade |
 | Jobs assíncronos | **TaskIQ** (Redis broker, brokers isolados por domínio) |
-| Workflows agentic | **LangGraph** (StateGraph, checkpoints, streaming) |
+| Workflows agentic | **LangGraph** (StateGraph — apenas se necessário) / pipelines determinísticos (OAB) |
 | Multi-modelo LLM | **LiteLLM** (interface unificada, fallback, cost tracking) |
 | Banco relacional | **PostgreSQL 17** + pgvector (3 databases) |
 | Fila/broker | **Redis 8** |
@@ -187,10 +198,31 @@ Repo: `/home/wital/platform-backend`
 | Tabelas de suporte da B.2.2 consultadas via compose (`Agendamento`, `WebhookDelivery`, `Automacao`) | ✅ |
 | Tabelas de suporte da B.2.3 adicionadas (`Chat`, `ArquivoLeadOab`) — import validado no compose | ✅ |
 
+### ✅ Fase 5 — Seção B.3: Agentes IA OAB (CONCLUÍDA 2026-03-21)
+
+| Item | Status |
+|------|--------|
+| `platform_core/ai/litellm_config.py` — CircuitBreaker, retry+jitter, vision, structured output | ✅ |
+| `platform_core/ai/cost_tracker.py` — `track_cost` + `track_cost_batch` via SQLAlchemy | ✅ |
+| `domains/socialwise/db/models/ai_agent_blueprint.py` — Mirror AiAgentBlueprint | ✅ |
+| `domains/socialwise/db/models/ai_assistant.py` — Mirror AiAssistant | ✅ |
+| `domains/socialwise/services/oab_eval/operation_control.py` — CancelMonitor + SSE emit | ✅ |
+| `domains/socialwise/services/oab_eval/runtime_policy.py` — Timeout/token budget | ✅ |
+| `domains/socialwise/services/oab_eval/rubric_scoring.py` — Score sanitization + verification | ✅ |
+| `domains/socialwise/services/oab_eval/blueprint_config.py` — 4-tier config resolution | ✅ |
+| `domains/socialwise/services/oab_eval/transcription_agent.py` — OCR pipeline (3-level fallback, concurrent) | ✅ |
+| `domains/socialwise/services/oab_eval/mirror_generator.py` — Vision extraction + rubric reconciliation | ✅ |
+| `domains/socialwise/services/oab_eval/analysis_agent.py` — Comparative analysis + gabarito injection | ✅ |
+| `domains/socialwise/tasks/transcription.py` — TaskIQ task (SSE throttle 800ms, batch cost) | ✅ |
+| `domains/socialwise/tasks/mirror_generation.py` — TaskIQ task | ✅ |
+| `domains/socialwise/tasks/analysis_generation.py` — TaskIQ task | ✅ |
+| ast.parse 16/16 OK, Docker imports OK, tsc --noEmit OK | ✅ |
+| Validação A/B Python vs TypeScript em 100 leads | ⏳ pendente (requer prod) |
+
 ### Stubs (a implementar nas próximas fases)
 
 - `platform_core/auth/` — JWT + NextAuth verification (compartilhado)
-- `platform_core/ai/` — LiteLLM config, cost tracker (compartilhado)
+- ~~`platform_core/ai/` — LiteLLM config, cost tracker~~ ✅ Implementado na B.3
 - `platform_core/services/` — Storage (MinIO), email, chatwit client, SSE manager (compartilhado)
 
 ---
@@ -695,9 +727,9 @@ Começar pelos workers mais simples para validar a stack TaskIQ + SQLAlchemy mir
 
 ---
 
-## B.3 — Agentes IA OAB (LangGraph + LiteLLM)
+## B.3 — Agentes IA OAB (LiteLLM — Pipelines Determinísticos)
 
-Maior complexidade. Requer portar de Vercel AI SDK para LangGraph + LiteLLM.
+Maior complexidade. Portado de Vercel AI SDK para LiteLLM. LangGraph descartado — workflows são pipelines determinísticos 1:1, não grafos de agentes.
 
 ### Arquivos-chave (TypeScript → Python)
 
@@ -711,11 +743,14 @@ Maior complexidade. Requer portar de Vercel AI SDK para LangGraph + LiteLLM.
 
 | Origem | Destino | Papel |
 |--------|---------|-------|
-| `lib/oab-eval/unified-vision-client.ts` (699 linhas) | `domains/socialwise/services/oab_eval/vision_client.py` | Multi-provider vision API (Gemini/OpenAI) |
-| `lib/oab-eval/operation-control.ts` | `domains/socialwise/services/oab_eval/operation_control.py` | Cancellation + abort signals |
-| `lib/oab-eval/rubric-scoring.ts` | `domains/socialwise/services/oab_eval/rubric_scoring.py` | Algoritmo de scoring |
-| `lib/oab-eval/ai-retry-fallback.ts` | (absorvido pelo LiteLLM fallback) | Retry com fallback de modelo |
-| `lib/oab-eval/runtime-policy.ts` | `domains/socialwise/services/oab_eval/runtime_policy.py` | Flags de comportamento por provider |
+| `lib/oab-eval/unified-vision-client.ts` (699 linhas) | ~~`vision_client.py`~~ → absorvido por `platform_core/ai/litellm_config.py` | LiteLLM vision nativo (`call_vision`, `call_vision_multi`) |
+| `lib/oab-eval/operation-control.ts` | `domains/socialwise/services/oab_eval/operation_control.py` | `CancelMonitor` (asyncio polling) + `emit_operation_event` (Redis pub/sub SSE) |
+| `lib/oab-eval/rubric-scoring.ts` | `domains/socialwise/services/oab_eval/rubric_scoring.py` | `sanitize_raw_score`, `build_score_map`, `verify_rubric_totals` |
+| `lib/oab-eval/ai-retry-fallback.ts` | absorvido por `platform_core/ai/litellm_config.py` (`with_retry` + jitter) | Retry com fallback de modelo |
+| `lib/oab-eval/runtime-policy.ts` | `domains/socialwise/services/oab_eval/runtime_policy.py` | `OabRuntimePolicy` dataclass + `resolve_runtime_policy` |
+| *(novo)* | `domains/socialwise/services/oab_eval/blueprint_config.py` | `get_agent_config` — 4-tier blueprint config resolution |
+| *(novo)* | `platform_core/ai/litellm_config.py` | Shared: `CircuitBreaker`, `call_completion`, `call_vision`, `call_structured`, `with_retry` |
+| *(novo)* | `platform_core/ai/cost_tracker.py` | `track_cost()` + `track_cost_batch()` → CostEvent rows |
 
 ### Workers IA (TaskIQ)
 
@@ -727,14 +762,18 @@ Maior complexidade. Requer portar de Vercel AI SDK para LangGraph + LiteLLM.
 
 ### Tarefas
 
-- [ ] Implementar `platform_core/ai/litellm_config.py` (LiteLLM com CircuitBreaker + fallback)
-- [ ] Implementar `platform_core/ai/cost_tracker.py` (callback LiteLLM → ai_cost_events)
-- [ ] Portar 3 agents (transcription, mirror, analysis) usando LangGraph StateGraph
-- [ ] Portar vision client (usar litellm para chamadas multi-provider)
-- [ ] Portar operation control (cancellation via Redis)
-- [ ] Portar rubric scoring (lógica pura)
-- [ ] SSE progress: publicar nos mesmos canais Redis
-- [ ] Validação A/B: comparar output Python vs TypeScript em 100 leads
+- [x] Implementar `platform_core/ai/litellm_config.py` (LiteLLM com CircuitBreaker + fallback + retry com jitter)
+- [x] Implementar `platform_core/ai/cost_tracker.py` (`track_cost` + `track_cost_batch` via SQLAlchemy session)
+- [x] Portar 3 agents (transcription, mirror, analysis) — **como pipelines determinísticos** (LangGraph não necessário)
+- [x] Portar vision client — **absorvido pelo LiteLLM** nativo (`image_url` content parts)
+- [x] Portar operation control (cancellation via Redis — `CancelMonitor` + `emit_operation_event`)
+- [x] Portar rubric scoring (lógica pura — `sanitize_raw_score`, `build_score_map`, `verify_rubric_totals`)
+- [x] Portar runtime policy (`resolve_runtime_policy` — timeout/token budget por provider)
+- [x] Portar blueprint config (`get_agent_config` — 4-tier resolution: linkedColumn → env → name → defaults)
+- [x] SSE progress: publicar nos mesmos canais Redis (`sse:lead:<leadId>`)
+- [x] Criar 3 tasks TaskIQ (transcription, mirror_generation, analysis_generation)
+- [x] Adicionar mirrors: `AiAgentBlueprint`, `AiAssistant`
+- [ ] Validação A/B: comparar output Python vs TypeScript em 100 leads (pendente — requer ambiente produção)
 
 ---
 
