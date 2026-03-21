@@ -36,10 +36,9 @@ async def track_cost(
     """
     try:
         from domains.socialwise.db.models.cost_event import CostEvent
+        from domains.socialwise.db.base import generate_cuid
 
-        import cuid2
-
-        event_id = cuid2.cuid_wrapper()
+        event_id = generate_cuid()
         now = datetime.now(timezone.utc)
         event = CostEvent(
             id=event_id,
