@@ -1,7 +1,6 @@
-"""ChatwitInbox model — mirror of Prisma ChatwitInbox table.
+"""ChatwitInbox model — mirror of Prisma ChatwitInbox table."""
 
-Needed by FlowCampaign worker to resolve inbox → accountId + channelType.
-"""
+from __future__ import annotations
 
 from typing import Optional
 
@@ -61,6 +60,11 @@ class ChatwitInbox(SocialwiseModel):
     usuario_chatwit: Mapped["UsuarioChatwit"] = relationship(
         "UsuarioChatwit", foreign_keys=[usuario_chatwit_id],
         primaryjoin="ChatwitInbox.usuario_chatwit_id == UsuarioChatwit.id",
+        lazy="selectin",
+    )
+    ai_assistant_links: Mapped[list["AiAssistantInbox"]] = relationship(
+        "AiAssistantInbox",
+        back_populates="inbox",
         lazy="selectin",
     )
 

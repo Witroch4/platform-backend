@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import litellm
-from litellm import acompletion
+from litellm import acompletion, aembedding
 from litellm.exceptions import (
     APIConnectionError,
     APIError,
@@ -62,6 +62,15 @@ class VisionResponse:
     total_tokens: int = 0
     duration_ms: int = 0
     was_fallback: bool = False
+
+
+@dataclass
+class EmbeddingResponse:
+    """Embedding vectors returned from LiteLLM."""
+
+    vectors: list[list[float]] = field(default_factory=list)
+    provider: str = "unknown"
+    model: str = "unknown"
 
 
 # ── Circuit Breaker ───────────────────────────────────────────────────────
@@ -271,6 +280,42 @@ async def _call_completion(
         raise
 
 
+async def _call_embedding(
+    model: str,
+    input_value: str | list[str],
+    *,
+    api_key: str | None = None,
+    timeout: int | None = None,
+    dimensions: int | None = None,
+    **kwargs: Any,
+) -> Any:
+    """Low-level LiteLLM aembedding with circuit breaker."""
+    provider_key = model.split("/")[0] if "/" in model else model
+
+    if not _circuit_breaker.can_attempt(provider_key):
+        raise APIError(f"Circuit breaker open for {provider_key}", status_code=503, llm_provider=provider_key)
+
+    try:
+        extra: dict[str, Any] = {}
+        if api_key:
+            extra["api_key"] = api_key
+        if dimensions:
+            extra["dimensions"] = dimensions
+        extra.update(kwargs)
+
+        response = await aembedding(
+            model=model,
+            input=input_value,
+            timeout=timeout or settings.litellm_timeout_seconds,
+            **extra,
+        )
+        _circuit_breaker.record_success(provider_key)
+        return response
+    except (RateLimitError, Timeout, APIConnectionError, APIError):
+        _circuit_breaker.record_failure(provider_key)
+        raise
+
+
 async def call_completion(
     model: str,
     messages: list[dict[str, Any]],
@@ -314,6 +359,48 @@ async def call_completion(
         provider=provider_name,
         model=model_name,
     )
+
+
+async def call_embedding(
+    model: str,
+    input_value: str | list[str],
+    *,
+    api_key: str | None = None,
+    timeout: int | None = None,
+    dimensions: int | None = None,
+    retries: int = 3,
+    base_delay_ms: float = 2000,
+    max_delay_ms: float = 10000,
+    **kwargs: Any,
+) -> EmbeddingResponse:
+    """Call LiteLLM embeddings API with retry + circuit breaker."""
+
+    raw = await with_retry(
+        lambda: _call_embedding(
+            model,
+            input_value,
+            api_key=api_key,
+            timeout=timeout,
+            dimensions=dimensions,
+            **kwargs,
+        ),
+        context=f"embedding:{model}",
+        retries=retries,
+        base_delay_ms=base_delay_ms,
+        max_delay_ms=max_delay_ms,
+    )
+
+    vectors: list[list[float]] = []
+    for item in getattr(raw, "data", []) or []:
+        embedding = getattr(item, "embedding", None)
+        if embedding is None and isinstance(item, dict):
+            embedding = item.get("embedding")
+        if isinstance(embedding, list):
+            vectors.append([float(value) for value in embedding])
+
+    provider_name = model.split("/")[0] if "/" in model else "unknown"
+    model_name = model.split("/", 1)[1] if "/" in model else model
+    return EmbeddingResponse(vectors=vectors, provider=provider_name, model=model_name)
 
 
 async def call_vision(

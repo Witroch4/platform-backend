@@ -8,6 +8,7 @@ All models must be imported here so SQLAlchemy metadata is populated.
 
 from domains.socialwise.db.models.account import Account
 from domains.socialwise.db.models.ai_agent_blueprint import AiAgentBlueprint
+from domains.socialwise.db.models.ai_assistant_inbox import AiAssistantInbox
 from domains.socialwise.db.models.chatwit_inbox import ChatwitInbox
 from domains.socialwise.db.models.ai_assistant import AiAssistant
 from domains.socialwise.db.models.arquivo_lead_oab import ArquivoLeadOab
@@ -39,6 +40,7 @@ from domains.socialwise.db.models.lead import Lead, LeadSource
 from domains.socialwise.db.models.lead_automacao import LeadAutomacao
 from domains.socialwise.db.models.lead_instagram_profile import LeadInstagramProfile
 from domains.socialwise.db.models.lead_oab_data import LeadOabData
+from domains.socialwise.db.models.intent import Intent, IntentActionType
 from domains.socialwise.db.models.mapeamento_botao import ActionType, MapeamentoBotao
 from domains.socialwise.db.models.midia import Midia
 from domains.socialwise.db.models.mapeamento_intencao import MapeamentoIntencao
@@ -63,6 +65,7 @@ __all__ = [
     # AI Blueprints/Assistants
     "AiAgentBlueprint",
     "AiAssistant",
+    "AiAssistantInbox",
     # Chatwit
     "ChatwitInbox",
     # Core auth/social
@@ -76,6 +79,9 @@ __all__ = [
     "LeadInstagramProfile",
     "LeadAutomacao",
     "LeadOabData",
+    # Intent
+    "Intent",
+    "IntentActionType",
     # Espelho
     "EspelhoPadrao",
     "EspecialidadeJuridica",
