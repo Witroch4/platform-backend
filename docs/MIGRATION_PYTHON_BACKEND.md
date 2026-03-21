@@ -7,6 +7,16 @@
 
 ### 2026-03-21
 
+- **Seção B.6 entrou em fase de cutover**: webhook FastAPI, `FlowOrchestrator`, `FlowExecutor`, `SyncBridge` e persistência de sessão/contexto já foram portados para Python; o pendente real ficou restrito ao apontamento do Chatwit para o FastAPI e ao teste live end-to-end.
+- Fechada a lacuna deixada na B.5: o webhook FastAPI agora persiste histórico/contexto de sessão do Router LLM em Redis (`session_state.py`), reaproveita isso no `process_socialwise_intent()` e bloqueia reoferta imediata da intent ativa.
+- Fechada a lacuna deixada na B.4: `EXECUTE_CONTACT` em `domains/socialwise/tasks/flow_campaign.py` agora executa o flow real via `FlowOrchestrator.execute_flow_by_id()` em vez de apenas resolver conversa e marcar contato como `SENT`.
+- Adicionados 2 mirrors Prisma que a documentação original não listava para a B.6: `InteractiveContent` (+ `Body`, `Header`, `Footer`, `ActionCtaUrl`, `ActionReplyButton`) e `LeadPayment`.
+- Criados `domains/socialwise/api/v1/endpoints/webhook.py` e `webhook_init.py`; `domains/socialwise/plugin.py` agora registra as rotas reais `/api/integrations/webhooks/socialwiseflow` e `/api/integrations/webhooks/socialwiseflow/init`.
+- Criados `domains/socialwise/services/flow/orchestrator.py`, `executor.py`, `runtime.py`, `sync_bridge.py` e `payment_handler.py`, completando o core do Flow Engine no `platform-backend`.
+- Corrigidas omissões reais descobertas no compose: `save_chatwit_system_config()` estava sem `commit()`, `VariableResolver` assumia `dict` e quebrava com `DeliveryContext`, `Body/Header/Footer/ActionCtaUrl/ActionReplyButton` não possuem timestamps no banco real, `FlowSession`/`FlowCampaign`/`FlowCampaignContact` usam enums nativos do Postgres e `SocialwiseModel` precisava preencher `createdAt`/`updatedAt` no insert para tabelas Prisma com `@updatedAt`.
+- Endurecido `FlowOrchestrator`: quando `DeliveryContext` chega sem `chatwit_base_url`/token, o runtime agora hidrata esses campos automaticamente a partir de `SystemConfig`, evitando falha artificial fora do webhook/campaign worker.
+- Corrigido bug de runtime do FlowExecutor: `INTERACTIVE_MESSAGE` agora resolve `messageId` a partir de `Template`/`InteractiveContent`, com eager-load completo dos relacionamentos necessários, e o parse monetário voltou a espelhar o TS (`2790` continua sendo `2790` centavos).
+- Validação da B.6: `python -m pytest tests/domains/socialwise -q` OK (`12 passed`) dentro do compose após instalação efêmera de `pytest`/`pytest-asyncio`; imports/`py_compile` do core FastAPI/Flow OK; runtime real no compose validou leitura de template interativo por `messageId` e execução de `execute_flow_by_id()` até a fronteira externa de delivery (`WHATSAPP_TEMPLATE`).
 - **Seção B.5 implementada**: pipeline de classificação de intenções do SocialWise Flow portado para Python, com processor reutilizável para a B.6.
 - Adicionados 2 mirrors Prisma que a documentação original omitia para a B.5: `Intent` e `AiAssistantInbox`.
 - Expandido `domains/socialwise/db/models/ai_assistant.py` com o subset real usado pelo pipeline de intents (deadlines, fallback model/provider, flags de handoff/sugestão, session TTL).
@@ -27,7 +37,7 @@
 - Implementado `domains/socialwise/services/flow/mtf_loader.py` — `load_mtf_variables_for_inbox()` (resolve inbox → userId → variáveis MTF + derivação de _centavos para pagamentos).
 - Criada task `domains/socialwise/tasks/flow_builder.py` — `process_flow_builder_task` (6 handlers: CHATWIT_ACTION, HTTP_REQUEST, TAG_ACTION, WEBHOOK_NOTIFY, DELAY, MEDIA_UPLOAD).
 - Criada task `domains/socialwise/tasks/flow_campaign.py` — `process_flow_campaign_task` (3 handlers: EXECUTE_CONTACT, PROCESS_BATCH, CAMPAIGN_CONTROL) + funções de orquestração (`check_campaign_completion`, batch processing, pause/cancel/resume).
-- Nota arquitetural: EXECUTE_CONTACT no Python resolve contato/conversa no Chatwit e marca como SENT. A execução real do flow (FlowOrchestrator) permanece no Next.js — será migrada na B.6.
+- Nota arquitetural histórica da B.4: nesta fase o worker de campanhas ainda não executava o flow real. Essa lacuna foi fechada na B.6 com a integração de `EXECUTE_CONTACT` ao `FlowOrchestrator` Python.
 - Validação: `ast.parse` 11/11 OK, Docker imports OK, `tsc --noEmit` OK, `git diff --check` OK.
 - **Seção B.3 concluída**: Agentes IA OAB portados para Python (LiteLLM, sem LangGraph — pipelines determinísticos 1:1).
 - Implementado `platform_core/ai/litellm_config.py` — shared LiteLLM config com CircuitBreaker, retry com jitter, vision support, structured output (`call_completion`, `call_vision`, `call_vision_multi`, `call_structured`).
@@ -915,7 +925,7 @@ O Flow Engine core (Orchestrator, Executor, SyncBridge) **permanece no Next.js**
 - [x] Portar MTF variable loader (inbox → userId → variáveis)
 - [x] Adicionar mirror: `ChatwitInbox` (dependência do EXECUTE_CONTACT)
 - [ ] Criar bridge: Next.js enfileira job → TaskIQ processa → resultado via Redis pub/sub
-- [ ] Integrar EXECUTE_CONTACT com FlowOrchestrator para execução real do flow (B.6)
+- [x] Integrar EXECUTE_CONTACT com FlowOrchestrator para execução real do flow (fechado na B.6)
 - [ ] Testar: flow async executa de ponta a ponta
 
 ---
@@ -954,7 +964,7 @@ O pipeline de classificação de intenções que roda no webhook.
 
 - **Processor da B.5 já é plugável na B.6**: `process_socialwise_intent()` já retorna `selected_intent`, `response` ou `action` (`resume_flow`/`handoff`) no formato esperado para o webhook FastAPI.
 - **Warmup e Router LLM estão portados sem `ai-provider-factory`**: o provider agora é resolvido via LiteLLM (`resolve_litellm_model` + `call_structured`/`call_embedding`).
-- **Persistência de sessão do Router não foi portada nesta task**: o TS usa session-manager/contexto de conversa para anti-loop contextual. Isso depende da migração do webhook/session bridge e fica explicitamente para a B.6.
+- **Persistência de sessão do Router foi portada na B.6**: `domains/socialwise/services/intent/session_state.py` passou a armazenar histórico e contexto interativo no Redis; o webhook FastAPI usa isso para anti-loop contextual e retomada coerente.
 - **Payloads interativos foram reduzidos ao contrato necessário da B.5**: `payload_builder.py` cobre respostas interativas de classificação (warmup/router) para WhatsApp/Instagram/Facebook. Template/flow delivery completo continua na B.6/B.4.
 
 ### Validação executada
@@ -972,13 +982,13 @@ O pipeline de classificação de intenções que roda no webhook.
 - [x] Integrar com LiteLLM (substituir ai-provider-factory)
 - [x] Validar unit tests + runtime no compose + TypeScript
 - [ ] Benchmark A/B: classificação retorna mesmos resultados (200 mensagens reais)
-- [ ] Plugar contexto de sessão/anti-loop do Router no webhook FastAPI (B.6)
+- [x] Plugar contexto de sessão/anti-loop do Router no webhook FastAPI (fechado na B.6)
 
 ---
 
-## B.6 — Webhook Route + Flow Engine Core
+## B.6 — Webhook Route + Flow Engine Core 🟡 CORE IMPLEMENTADO 2026-03-21
 
-**Fase final da migração Socialwise.** Mover o webhook e o Flow Engine core para FastAPI.
+**Fase final da migração Socialwise.** O core técnico foi portado para FastAPI/Python nesta etapa. O que permanece pendente é o cutover operacional do Chatwit e a validação live end-to-end com mensagens reais.
 
 ### Arquivos-chave
 
@@ -989,15 +999,68 @@ O pipeline de classificação de intenções que roda no webhook.
 | `services/flow-engine/flow-orchestrator.ts` | `domains/socialwise/services/flow/orchestrator.py` | Orquestrador de flows |
 | `services/flow-engine/flow-executor.ts` | `domains/socialwise/services/flow/executor.py` | Executor nó-a-nó |
 | `services/flow-engine/sync-bridge.ts` | `domains/socialwise/services/flow/sync_bridge.py` | Ponte sync 30s (rewrite para async Python) |
+| `services/flow-engine/runtime/*` (implícito no TS) | `domains/socialwise/services/flow/runtime.py` | Dataclasses do runtime (`RuntimeFlow`, `FlowSessionData`, `ExecuteResult`) |
+| webhook payment handler (implícito no Next.js) | `domains/socialwise/services/flow/payment_handler.py` | `payment.confirmed` → `LeadPayment` + retomada do flow |
+| session manager/context bridge (implícito no Next.js) | `domains/socialwise/services/intent/session_state.py` | Histórico/contexto Redis para Router LLM |
+| Prisma `InteractiveContent*` (omitido pela doc original) | `domains/socialwise/db/models/interactive_content.py` | Templates interativos por `messageId` |
+| Prisma `LeadPayment` (omitido pela doc original) | `domains/socialwise/db/models/lead_payment.py` | Persistência de pagamento confirmado |
+
+### Entregue nesta etapa
+
+- `domains/socialwise/api/v1/endpoints/webhook.py`:
+  - auth opcional por bearer (`socialwiseflow_access_token`)
+  - limite de payload `256KB`
+  - dedup por `source_message_id`
+  - atalhos `@falar_atendente`, `@recomecar`, `@sair`, `@retry`
+  - retomada prioritária de flow (`flow_` button, `WAIT_FOR_REPLY`, match textual de template)
+  - persistência de histórico/contexto do Router LLM no Redis
+  - fallback para `process_socialwise_intent()` + `resolve_intent_mapping()`
+  - dispatch para flow quando o mapeamento final aponta para `flowId`
+- `domains/socialwise/api/v1/endpoints/webhook_init.py`: init webhook do Chatwit com persistência de bot token/base URL em `SystemConfig`.
+- `domains/socialwise/services/flow/orchestrator.py`:
+  - `handle()` para `flow_` button, retomada de sessão e free-text
+  - `execute_flow_by_id()` para campanhas e rotas por intent
+  - `resume_from_payment()` para continuar flows após confirmação de pagamento
+  - persistência de `FlowSession` e serialização segura para runtime
+- `domains/socialwise/services/flow/executor.py`:
+  - execução nó-a-nó (`TEXT_MESSAGE`, `INTERACTIVE_MESSAGE`, `WHATSAPP_TEMPLATE`, `MEDIA`, `DELAY`, `CONDITION`, `SET_VARIABLE`, `HTTP_REQUEST`, `REACTION`, `CHATWIT_ACTION`, `WAIT_FOR_REPLY`, `GENERATE_PAYMENT_LINK`)
+  - bridge sync/async compatível com o contrato do Chatwit
+  - resolução de template interativo por `messageId` via `Template` + `InteractiveContent`
+- `domains/socialwise/tasks/flow_campaign.py`: `EXECUTE_CONTACT` passou a executar o flow real e a persistir `session_id`.
+- `domains/socialwise/plugin.py`: registro real das rotas fixas do Chatwit no FastAPI.
+
+### Omissões descobertas e corrigidas
+
+- A doc original não listava os mirrors `InteractiveContent` e `LeadPayment`, mas a B.6 depende deles para `INTERACTIVE_MESSAGE` por `messageId` e `payment.confirmed`.
+- `save_chatwit_system_config()` estava sem `commit()`; o init/webhook não persistiria `bot_token` e `base_url`.
+- `VariableResolver` assumia `dict`, mas o runtime usa `DeliveryContext` dataclass.
+- `Body`, `Header`, `Footer`, `ActionCtaUrl` e `ActionReplyButton` não possuem `createdAt/updatedAt` no banco real; o primeiro mirror quebrava inserts/loads com `UndefinedColumnError`.
+- `FlowSession.status`, `FlowCampaign.status` e `FlowCampaignContact.status` são enums nativos do Postgres; o mirror inicial com `String` falhava na primeira escrita real.
+- Em tabelas Prisma com `@updatedAt`, o banco atual não garante default nativo para `updatedAt`; `SocialwiseModel` passou a preencher `createdAt`/`updatedAt` no insert pelo lado Python.
+- `MapeamentoIntencao`/`Template` precisaram de eager-load completo do conteúdo interativo para evitar dependência em lazy load após fechamento da sessão.
+
+### Validação executada
+
+- `docker compose exec -T platform-api python -m py_compile ...` nos arquivos novos/alterados do core B.6: OK.
+- `docker compose exec -T platform-api python -m pytest tests/domains/socialwise -q`: `12 passed in 2.73s`.
+- Observação de ambiente: a imagem atual do `platform-backend` não inclui `pytest`; a suíte foi executada após instalação efêmera de `pytest` + `pytest-asyncio` no próprio container.
+- Imports runtime dentro do compose: `domains.socialwise.services.flow.orchestrator`, `payment_handler`, `domains.socialwise.api.v1.endpoints.webhook` e `webhook_init` OK.
+- Runtime real no compose: `FlowExecutor.resolve_message_id('cmfbuy5nx003co72qqq023td1')` passou a resolver o template interativo real do banco após o ajuste do mirror `InteractiveContent`.
+- Runtime real no compose: `FlowOrchestrator.execute_flow_by_id('cmly4h2dr000srq01rvm46cql', ...)` criou e atualizou `FlowSession` com sucesso; após hidratar `base_url`/token por `SystemConfig`, a execução alcançou a chamada HTTP real do Chatwit e falhou apenas com `404` esperado porque a conversa `999001` usada no teste era sintética.
+- `pnpm exec tsc --noEmit`: OK.
+- `pnpm exec tsc --noEmit -p tsconfig.worker.json`: OK.
 
 ### Tarefas
 
-- [ ] Criar endpoint webhook em FastAPI
-- [ ] Rewrite SyncBridge para async Python (usar asyncio.Queue ou similar)
-- [ ] Portar FlowOrchestrator
-- [ ] Portar FlowExecutor
+- [x] Criar endpoint webhook em FastAPI
+- [x] Rewrite SyncBridge para async Python
+- [x] Portar FlowOrchestrator
+- [x] Portar FlowExecutor
+- [x] Persistir contexto de sessão/anti-loop do Router no webhook FastAPI
+- [x] Integrar `payment.confirmed` + `LeadPayment` + retomada de flow
+- [x] Integrar `EXECUTE_CONTACT` com FlowOrchestrator
 - [ ] Configurar Chatwit para apontar webhook para FastAPI
-- [ ] Testar: flow completo (sync + async) funciona end-to-end
+- [ ] Testar: flow completo (sync + async) funciona end-to-end com Chatwit real
 
 ---
 
