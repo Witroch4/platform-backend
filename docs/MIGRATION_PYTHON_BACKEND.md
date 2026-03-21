@@ -7,6 +7,12 @@
 
 ### 2026-03-21
 
+- **Seção B.7 iniciada pelo grupo `Flows`**: as rotas admin `app/api/admin/mtf-diamante/flows/*` agora têm equivalentes FastAPI em `domains/socialwise/api/v1/endpoints/admin_flows.py`, com lógica extraída para `domains/socialwise/services/flow/admin_service.py`.
+- O Socialwise Next.js deixou de executar CRUD/import/export de flows diretamente nesse grupo: os route handlers viraram BFF proxies finos para o `platform-backend` usando `X-Internal-API-Key` + `X-App-User-Id`.
+- Adicionado 1 mirror Prisma que a documentação original não listava para a B.7: `InboxFlowCanvas` em `domains/socialwise/db/models/inbox_flow_canvas.py`, necessário para fallback de export de flows legados sem `canvasJson`.
+- Corrigido bug real omitido pela doc/rota TS: importação de flow agora sincroniza `FlowNode`/`FlowEdge` imediatamente no backend Python, evitando que o executor/analytics leiam um grafo vazio até o primeiro save manual do canvas.
+- Corrigido bug defensivo da B.7: deleção de flow agora bloqueia explicitamente quando existem campanhas vinculadas, em vez de estourar erro de integridade no banco no commit final.
+- Validação da B.7.1: `docker compose exec -T platform-api python3 -m py_compile ...` OK; `docker compose exec -T platform-api python3 -m pytest tests/domains/socialwise -q` OK (`16 passed`); runtime do app real confirmou o registro da rota `/api/v1/socialwise/admin/mtf-diamante/flows`; `pnpm exec tsc --noEmit` e `pnpm exec tsc --noEmit -p tsconfig.worker.json` OK.
 - **Seção B.6 entrou em fase de cutover**: webhook FastAPI, `FlowOrchestrator`, `FlowExecutor`, `SyncBridge` e persistência de sessão/contexto já foram portados para Python; o pendente real ficou restrito ao apontamento do Chatwit para o FastAPI e ao teste live end-to-end.
 - Fechada a lacuna deixada na B.5: o webhook FastAPI agora persiste histórico/contexto de sessão do Router LLM em Redis (`session_state.py`), reaproveita isso no `process_socialwise_intent()` e bloqueia reoferta imediata da intent ativa.
 - Fechada a lacuna deixada na B.4: `EXECUTE_CONTACT` em `domains/socialwise/tasks/flow_campaign.py` agora executa o flow real via `FlowOrchestrator.execute_flow_by_id()` em vez de apenas resolver conversa e marcar contato como `SENT`.
@@ -246,6 +252,21 @@ Repo: `/home/wital/platform-backend`
 | `domains/socialwise/tasks/flow_campaign.py` — 3 job types (EXECUTE_CONTACT, PROCESS_BATCH, CAMPAIGN_CONTROL) + orchestrator | ✅ |
 | ast.parse 11/11 OK, Docker imports OK, tsc --noEmit OK | ✅ |
 | Integração com FlowOrchestrator (execução real do flow) | ⏳ pendente (B.6) |
+
+### 🟡 Fase 10 — Seção B.7: Admin API Routes (INICIADA 2026-03-21)
+
+| Item | Status |
+|------|--------|
+| `domains/socialwise/api/v1/endpoints/admin_flows.py` — grupo `Flows` (GET/POST/PATCH/PUT/DELETE/import/export) | ✅ |
+| `domains/socialwise/services/flow/admin_service.py` — lógica extraída dos route handlers Next.js | ✅ |
+| `domains/socialwise/services/flow/canvas_sync.py` — materialização `canvasJson` → `FlowNode`/`FlowEdge` | ✅ |
+| `domains/socialwise/services/flow/export_import.py` — import/export n8n-style no backend Python | ✅ |
+| `domains/socialwise/db/models/inbox_flow_canvas.py` — fallback de export para flows legados | ✅ |
+| `socialwise/lib/platform-backend/admin-proxy.ts` — BFF proxy com `X-Internal-API-Key` + `X-App-User-Id` | ✅ |
+| `app/api/admin/mtf-diamante/flows/*` apontando para FastAPI | ✅ |
+| Templates / Variáveis / Campanhas / Leads / Analytics / Cost / OAB | ⏳ pendente |
+| SSE admin FastAPI | ⏳ pendente |
+| Validação frontend end-to-end do grupo `Flows` via UI real | ⏳ pendente |
 
 ### ✅ Fase 7 — Seção B.5: SocialWise Flow (Intent Classification) (CONCLUÍDA 2026-03-21)
 
@@ -1064,7 +1085,7 @@ O pipeline de classificação de intenções que roda no webhook.
 
 ---
 
-## B.7 — Admin API Routes
+## B.7 — Admin API Routes 🟡 INICIADA 2026-03-21
 
 Migrar as rotas admin do Next.js para FastAPI.
 
@@ -1081,13 +1102,51 @@ Migrar as rotas admin do Next.js para FastAPI.
 | Cost | `app/api/admin/cost/` | `domains/socialwise/api/v1/endpoints/cost.py` | ~4 |
 | OAB | vários em `app/api/admin/` | `domains/socialwise/api/v1/endpoints/oab.py` | ~8 |
 
+### B.7.1 — Grupo `Flows` (CONCLUÍDO 2026-03-21)
+
+#### Arquivos-chave
+
+| Origem | Destino | Papel |
+|--------|---------|-------|
+| `app/api/admin/mtf-diamante/flows/route.ts` | `domains/socialwise/api/v1/endpoints/admin_flows.py` (`GET`,`POST`) | Listar/criar flows |
+| `app/api/admin/mtf-diamante/flows/[flowId]/route.ts` | `domains/socialwise/api/v1/endpoints/admin_flows.py` (`GET`,`PATCH`,`PUT`,`DELETE`) | CRUD do flow individual + save do canvas |
+| `app/api/admin/mtf-diamante/flows/import/route.ts` | `domains/socialwise/api/v1/endpoints/admin_flows.py` (`POST /import`) | Import n8n-style |
+| `app/api/admin/mtf-diamante/flows/[flowId]/export/route.ts` | `domains/socialwise/api/v1/endpoints/admin_flows.py` (`GET /{flow_id}/export`) | Export n8n-style |
+| lógica inline nos route handlers | `domains/socialwise/services/flow/admin_service.py` | Regras de acesso, CRUD, import/export, deleção segura |
+| `lib/flow-builder/syncFlow.ts` | `domains/socialwise/services/flow/canvas_sync.py` | Sync `canvasJson` → `FlowNode` / `FlowEdge` |
+| `lib/flow-builder/exportImport.ts` | `domains/socialwise/services/flow/export_import.py` | Conversão canvas ↔ n8n-style |
+| route handlers Next.js locais | `socialwise/lib/platform-backend/admin-proxy.ts` | BFF proxy para o FastAPI |
+
+#### Entregue nesta etapa
+
+- CRUD completo do grupo `Flows` portado para FastAPI (`list`, `create`, `detail`, `rename/activate`, `save canvas`, `delete`).
+- Import/export de flow portado para Python com preservação do contrato JSON atual do frontend.
+- Save do canvas agora materializa `FlowNode`/`FlowEdge` no backend Python, mantendo o executor/analytics alinhados com o estado salvo.
+- Route handlers Next.js do grupo `Flows` reduziram para proxy fino autenticado; a lógica saiu do app web.
+
+#### Omissões descobertas e corrigidas
+
+- A doc original não listava `InboxFlowCanvas`, mas o export do grupo `Flows` precisa desse fallback para flows legados sem `canvasJson`.
+- O import TS criava `Flow.canvasJson`, mas não sincronizava `FlowNode`/`FlowEdge`; isso deixava o executor Python cego até um save manual posterior.
+- A deleção de flow não tratava campanhas vinculadas; com o mirror Python isso passou a falhar de forma explícita e amigável antes do commit.
+
+#### Validação executada
+
+- `docker compose exec -T platform-api python3 -m py_compile ...` nos novos arquivos da B.7.1: OK.
+- `docker compose exec -T platform-api python3 -m pytest tests/domains/socialwise -q`: `16 passed in 2.41s`.
+- Runtime leve no compose: `create_app()` registrou `/api/v1/socialwise/admin/mtf-diamante/flows` com sucesso.
+- `pnpm exec tsc --noEmit`: OK.
+- `pnpm exec tsc --noEmit -p tsconfig.worker.json`: OK.
+
 ### Tarefas
 
-- [ ] Extrair lógica de negócio dos route handlers para services
-- [ ] Criar endpoints FastAPI equivalentes
-- [ ] Next.js BFF aponta para FastAPI (proxy)
+- [x] Extrair lógica de negócio dos route handlers para services (grupo `Flows`)
+- [x] Criar endpoints FastAPI equivalentes (grupo `Flows`)
+- [x] Next.js BFF aponta para FastAPI (grupo `Flows`)
+- [ ] Next.js BFF aponta para FastAPI (demais grupos)
 - [ ] Migrar endpoints SSE para FastAPI StreamingResponse
 - [ ] Testar: frontend continua funcionando sem mudanças
+- [ ] Migrar grupos restantes: Templates, Variáveis, Campanhas, Leads, Analytics, Cost e OAB
 
 ---
 
@@ -1213,3 +1272,26 @@ Tarefas que podem ser feitas em paralelo com A e B.
 | 10 | Frontend funciona sem mudanças (proxy para FastAPI) |
 | 11 | `worker/` deletada, zero BullMQ, Next.js = frontend puro |
 | 12 | Produção estável com monitoramento completo |
+
+---
+
+## Status da Última Task
+
+- Task executada: `B.7.1 — Admin API Routes / grupo Flows`
+- Resultado: CRUD/import/export de flows saiu do Next.js e passou a rodar no `platform-backend`, com os route handlers do Socialwise reduzidos a BFF proxy.
+- Lacuna eliminada nesta task: import de flow agora sincroniza `FlowNode`/`FlowEdge` imediatamente; export legado ganhou fallback por `InboxFlowCanvas`.
+
+### Validações
+
+- `docker compose exec -T platform-api python3 -m py_compile ...`: OK
+- `docker compose exec -T platform-api python3 -m pytest tests/domains/socialwise -q`: `16 passed`
+- runtime do compose: rota `/api/v1/socialwise/admin/mtf-diamante/flows` registrada no `create_app()`
+- `pnpm exec tsc --noEmit`: OK
+- `pnpm exec tsc --noEmit -p tsconfig.worker.json`: OK
+
+### Pendências explícitas
+
+- Configurar `PLATFORM_BACKEND_INTERNAL_URL` e `PLATFORM_API_KEY` no ambiente do Socialwise para o BFF proxy do grupo `Flows`.
+- Validar o grupo `Flows` end-to-end pela UI real do Flow Builder usando o proxy Next.js → FastAPI.
+- Continuar B.7 migrando os próximos grupos: Templates, Variáveis, Campanhas, Leads, Analytics, Cost e OAB.
+- Pendências herdadas e ainda abertas da B.6/B.5: apontar o Chatwit para o webhook FastAPI, validar flow sync+async end-to-end com conversa real e rodar benchmark A/B de 200 mensagens da classificação.
