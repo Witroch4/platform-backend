@@ -15,6 +15,11 @@
   - **API routes NÃO mudaram** — `app/api/admin/mtf-diamante/*` e `app/api/admin/leads-chatwit/*` continuam nos mesmos paths.
   - Quando FastAPI assumir auth, o redirect pós-login deve apontar para `/hub`.
   - Nova estrutura de acesso: `/hub` (qualquer auth) → `/mtf-diamante` (ADMIN+SUPERADMIN) | `/gestao-social` (user com Instagram) | `/admin` (SUPERADMIN).
+- **Seção B.7 expandida pelo grupo `Variáveis + Lotes`**: as rotas admin `app/api/admin/mtf-diamante/variaveis/*`, `lote-ativo` e `lotes/*` agora têm equivalentes FastAPI em `domains/socialwise/api/v1/endpoints/admin_mtf.py`, com lógica extraída para `domains/socialwise/services/flow/admin_mtf_service.py`.
+- Corrigido gap do inventário original da B.7: o tab de configuração MTF não depende só de `variaveis`, mas também de `lotes/*`; o slice foi fechado verticalmente no mesmo backend Python para não deixar a UI dividida entre duas fontes.
+- Expandido o mirror existente de `User` com `mtfVariaveisPopuladas`, necessário para manter paridade com o seed automático de variáveis MTF no backend Python.
+- Corrigida lacuna funcional do fluxo legado de variáveis: quando a configuração existe mas só contém `lotes_oab` interno, o backend Python agora reidrata as variáveis editáveis padrão (`chave_pix`, `nome_do_escritorio_rodape`, `analise`) em vez de devolver a tela vazia após reset/import parcial.
+- Validação da B.7.2: `docker compose exec -T platform-api python3 -m py_compile ...` OK; `docker compose exec -T platform-api python3 -m pytest tests/domains/socialwise -q` OK (`19 passed`); runtime do app real confirmou o registro das rotas `/api/v1/socialwise/admin/mtf-diamante/variaveis`, `/lotes` e `/lote-ativo`; `pnpm exec tsc --noEmit` e `pnpm exec tsc --noEmit -p tsconfig.worker.json` OK.
 - **Seção B.7 iniciada pelo grupo `Flows`**: as rotas admin `app/api/admin/mtf-diamante/flows/*` agora têm equivalentes FastAPI em `domains/socialwise/api/v1/endpoints/admin_flows.py`, com lógica extraída para `domains/socialwise/services/flow/admin_service.py`.
 - O Socialwise Next.js deixou de executar CRUD/import/export de flows diretamente nesse grupo: os route handlers viraram BFF proxies finos para o `platform-backend` usando `X-Internal-API-Key` + `X-App-User-Id`.
 - Adicionado 1 mirror Prisma que a documentação original não listava para a B.7: `InboxFlowCanvas` em `domains/socialwise/db/models/inbox_flow_canvas.py`, necessário para fallback de export de flows legados sem `canvasJson`.
@@ -270,9 +275,12 @@ Repo: `/home/wital/platform-backend`
 | `domains/socialwise/services/flow/canvas_sync.py` — materialização `canvasJson` → `FlowNode`/`FlowEdge` | ✅ |
 | `domains/socialwise/services/flow/export_import.py` — import/export n8n-style no backend Python | ✅ |
 | `domains/socialwise/db/models/inbox_flow_canvas.py` — fallback de export para flows legados | ✅ |
+| `domains/socialwise/api/v1/endpoints/admin_mtf.py` — grupo `Variáveis + Lotes` (`variaveis`, `variaveis/seed`, `lote-ativo`, `lotes`) | ✅ |
+| `domains/socialwise/services/flow/admin_mtf_service.py` — seed automático, variáveis MTF, `lotes_oab`, cache invalidation | ✅ |
 | `socialwise/lib/platform-backend/admin-proxy.ts` — BFF proxy com `X-Internal-API-Key` + `X-App-User-Id` | ✅ |
 | `app/api/admin/mtf-diamante/flows/*` apontando para FastAPI | ✅ |
-| Templates / Variáveis / Campanhas / Leads / Analytics / Cost / OAB | ⏳ pendente |
+| `app/api/admin/mtf-diamante/variaveis/*`, `lote-ativo`, `lotes/*` apontando para FastAPI | ✅ |
+| Templates / Campanhas / Leads / Analytics / Cost / OAB | ⏳ pendente |
 | SSE admin FastAPI | ⏳ pendente |
 | Validação frontend end-to-end do grupo `Flows` via UI real | ⏳ pendente |
 
@@ -1102,8 +1110,8 @@ Migrar as rotas admin do Next.js para FastAPI.
 | Grupo | Origem (Next.js) | Destino (FastAPI) | # Rotas |
 |-------|-----------------|------------------|---------|
 | Flows | `app/api/admin/mtf-diamante/flows/` | `domains/socialwise/api/v1/endpoints/flows.py` | ~8 |
+| Variáveis + Lotes | `app/api/admin/mtf-diamante/variaveis/`, `lote-ativo/`, `lotes/` | `domains/socialwise/api/v1/endpoints/admin_mtf.py` | ~8 |
 | Templates | `app/api/admin/mtf-diamante/templates/` | `domains/socialwise/api/v1/endpoints/templates.py` | ~6 |
-| Variáveis | `app/api/admin/mtf-diamante/variaveis/` | `domains/socialwise/api/v1/endpoints/variables.py` | ~4 |
 | Campanhas | `app/api/admin/mtf-diamante/campaigns/` | `domains/socialwise/api/v1/endpoints/campaigns.py` | ~6 |
 | Leads | `app/api/admin/leads-chatwit/` | `domains/socialwise/api/v1/endpoints/leads.py` | ~10 |
 | Analytics | `app/api/admin/mtf-diamante/flow-analytics/` | `domains/socialwise/api/v1/endpoints/analytics.py` | ~4 |
@@ -1146,15 +1154,51 @@ Migrar as rotas admin do Next.js para FastAPI.
 - `pnpm exec tsc --noEmit`: OK.
 - `pnpm exec tsc --noEmit -p tsconfig.worker.json`: OK.
 
+### B.7.2 — Grupo `Variáveis + Lotes` (CONCLUÍDO 2026-03-21)
+
+#### Arquivos-chave
+
+| Origem | Destino | Papel |
+|--------|---------|-------|
+| `app/api/admin/mtf-diamante/variaveis/route.ts` | `domains/socialwise/api/v1/endpoints/admin_mtf.py` (`GET`,`POST`) | Listar/salvar variáveis MTF |
+| `app/api/admin/mtf-diamante/variaveis/seed/route.ts` | `domains/socialwise/api/v1/endpoints/admin_mtf.py` (`POST /variaveis/seed`) | Seed automático por usuário |
+| `app/api/admin/mtf-diamante/lote-ativo/route.ts` | `domains/socialwise/api/v1/endpoints/admin_mtf.py` (`GET /lote-ativo`) | Lote ativo fresh, sem cache |
+| `app/api/admin/mtf-diamante/lotes/route.ts` | `domains/socialwise/api/v1/endpoints/admin_mtf.py` (`GET`,`POST`,`PUT`,`DELETE`) | CRUD legacy da coleção de lotes |
+| `app/api/admin/mtf-diamante/lotes/[id]/route.ts` | `domains/socialwise/api/v1/endpoints/admin_mtf.py` (`PATCH`,`DELETE`) | CRUD por lote específico |
+| lógica inline dos route handlers | `domains/socialwise/services/flow/admin_mtf_service.py` | Garantia de `User`, seed MTF, serialização de variáveis e mutação de `lotes_oab` |
+
+#### Entregue nesta etapa
+
+- Tab de configuração MTF deixou de executar regras de negócio no Next.js para `variaveis`, `variaveis/seed`, `lote-ativo` e `lotes`; os route handlers agora são BFF proxy fino autenticado.
+- Backend Python passou a centralizar o seed automático, a hidratação de defaults editáveis, a leitura do lote ativo e o CRUD completo de `lotes_oab`.
+- A invalidação de cache Redis (`mtf_variables:*`, `mtf_lotes:*`) foi portada para o `platform-backend`, mantendo o comportamento esperado da UI após salvar variáveis ou alterar lotes.
+
+#### Omissões descobertas e corrigidas
+
+- O inventário inicial da B.7 citava `Variáveis`, mas o tab real também depende de `lotes/*`; esse grupo foi absorvido no mesmo slice para não deixar a tela híbrida.
+- O mirror `User` originalmente portado na B.2.2 não incluía `mtfVariaveisPopuladas`; o campo precisou ser adicionado para manter a semântica do seed idempotente.
+- O fluxo legado podia deixar a configuração com apenas `lotes_oab` após reset/import parcial; o backend Python agora recompõe as variáveis editáveis padrão nesse cenário.
+
+#### Validação executada
+
+- `docker compose exec -T platform-api python3 -m py_compile ...` nos novos arquivos da B.7.2: OK.
+- `docker compose exec -T platform-api python3 -m pytest tests/domains/socialwise -q`: `19 passed in 2.68s`.
+- Runtime leve no compose: `create_app()` registrou `/api/v1/socialwise/admin/mtf-diamante/variaveis`, `/lotes` e `/lote-ativo` com sucesso.
+- `pnpm exec tsc --noEmit`: OK.
+- `pnpm exec tsc --noEmit -p tsconfig.worker.json`: OK.
+
 ### Tarefas
 
 - [x] Extrair lógica de negócio dos route handlers para services (grupo `Flows`)
 - [x] Criar endpoints FastAPI equivalentes (grupo `Flows`)
 - [x] Next.js BFF aponta para FastAPI (grupo `Flows`)
+- [x] Extrair lógica de negócio dos route handlers para services (grupo `Variáveis + Lotes`)
+- [x] Criar endpoints FastAPI equivalentes (grupo `Variáveis + Lotes`)
+- [x] Next.js BFF aponta para FastAPI (grupo `Variáveis + Lotes`)
 - [ ] Next.js BFF aponta para FastAPI (demais grupos)
 - [ ] Migrar endpoints SSE para FastAPI StreamingResponse
 - [ ] Testar: frontend continua funcionando sem mudanças
-- [ ] Migrar grupos restantes: Templates, Variáveis, Campanhas, Leads, Analytics, Cost e OAB
+- [ ] Migrar grupos restantes: Templates, Campanhas, Leads, Analytics, Cost e OAB
 
 ---
 
@@ -1285,21 +1329,22 @@ Tarefas que podem ser feitas em paralelo com A e B.
 
 ## Status da Última Task
 
-- Task executada: `B.7.1 — Admin API Routes / grupo Flows`
-- Resultado: CRUD/import/export de flows saiu do Next.js e passou a rodar no `platform-backend`, com os route handlers do Socialwise reduzidos a BFF proxy.
-- Lacuna eliminada nesta task: import de flow agora sincroniza `FlowNode`/`FlowEdge` imediatamente; export legado ganhou fallback por `InboxFlowCanvas`.
+- Task executada: `B.7.2 — Admin API Routes / grupo Variáveis + Lotes`
+- Resultado: o tab de configuração MTF (`variaveis`, `variaveis/seed`, `lote-ativo`, `lotes`) saiu do Next.js e passou a rodar no `platform-backend`, com os route handlers do Socialwise reduzidos a BFF proxy.
+- Lacuna eliminada nesta task: a doc da B.7 omitira `lotes/*` como dependência real do mesmo tab; o slice foi fechado verticalmente no backend Python. Também foi restaurada a hidratação automática das variáveis padrão quando sobra apenas `lotes_oab` interno.
 
 ### Validações
 
 - `docker compose exec -T platform-api python3 -m py_compile ...`: OK
-- `docker compose exec -T platform-api python3 -m pytest tests/domains/socialwise -q`: `16 passed`
-- runtime do compose: rota `/api/v1/socialwise/admin/mtf-diamante/flows` registrada no `create_app()`
+- `docker compose exec -T platform-api python3 -m pytest tests/domains/socialwise -q`: `19 passed`
+- runtime do compose: rotas `/api/v1/socialwise/admin/mtf-diamante/variaveis`, `/lotes` e `/lote-ativo` registradas no `create_app()`
 - `pnpm exec tsc --noEmit`: OK
 - `pnpm exec tsc --noEmit -p tsconfig.worker.json`: OK
 
 ### Pendências explícitas
 
 - Configurar `PLATFORM_BACKEND_INTERNAL_URL` e `PLATFORM_API_KEY` no ambiente do Socialwise para o BFF proxy do grupo `Flows`.
+- Revalidar end-to-end pela UI real o tab de configuração MTF (`variaveis` + `lotes`) usando o proxy Next.js → FastAPI.
 - Validar o grupo `Flows` end-to-end pela UI real do Flow Builder usando o proxy Next.js → FastAPI.
-- Continuar B.7 migrando os próximos grupos: Templates, Variáveis, Campanhas, Leads, Analytics, Cost e OAB.
+- Continuar B.7 migrando os próximos grupos: Templates, Campanhas, Leads, Analytics, Cost e OAB.
 - Pendências herdadas e ainda abertas da B.6/B.5: apontar o Chatwit para o webhook FastAPI, validar flow sync+async end-to-end com conversa real e rodar benchmark A/B de 200 mensagens da classificação.

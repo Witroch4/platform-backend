@@ -1,167 +1,22 @@
-import { type NextRequest, NextResponse } from "next/server";
-import { getPrismaInstance } from "@/lib/connections";
-import { auth } from "@/auth";
+import { type NextRequest } from "next/server";
+import { proxyPlatformAdminRequest } from "@/lib/platform-backend/admin-proxy";
 
-// Helper function to ensure "R$" prefix in value
-function normalizeValor(valor: string): string {
-	if (!valor) return valor;
-	const trimmedValor = valor.trim();
-	// Check if already has R$ prefix (case insensitive)
-	if (/^R\$\s*/i.test(trimmedValor)) {
-		return trimmedValor;
-	}
-	// Add R$ prefix
-	return `R$ ${trimmedValor}`;
+function getPlatformPath(id: string): string {
+	return `/api/v1/socialwise/admin/mtf-diamante/lotes/${encodeURIComponent(id)}`;
 }
 
-// PATCH - Atualizar lote (status ou dados completos)
-export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-	try {
-		const session = await auth();
-		if (!session?.user?.id) {
-			return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
-		}
-
-		const { id } = await params;
-		const body = await request.json();
-		const { isActive, numero, nome, valor, dataInicio, dataFim } = body;
-
-		// Buscar a configuração do MTF Diamante
-		const config = await getPrismaInstance().mtfDiamanteConfig.findUnique({
-			where: { userId: session.user.id },
-			include: { variaveis: true },
-		});
-
-		if (!config) {
-			return NextResponse.json({ error: "Configuração não encontrada" }, { status: 404 });
-		}
-
-		// Buscar a variável de lotes
-		const lotesVariavel = config.variaveis.find((v) => v.chave === "lotes_oab");
-
-		if (!lotesVariavel || !lotesVariavel.valor || !Array.isArray(lotesVariavel.valor)) {
-			return NextResponse.json({ error: "Lotes não encontrados" }, { status: 404 });
-		}
-
-		// Encontrar e atualizar o lote
-		const lotes: any[] = lotesVariavel.valor as unknown as any[];
-		const loteIndex = lotes.findIndex((l: any) => l.id === id);
-
-		if (loteIndex === -1) {
-			return NextResponse.json({ error: "Lote não encontrado" }, { status: 404 });
-		}
-
-		// LÓGICA PARA GARANTIR APENAS UM LOTE ATIVO
-		if (isActive === true) {
-			// Se estamos ativando este lote, desativar todos os outros
-			lotes.forEach((lote, index) => {
-				if (index !== loteIndex) {
-					lote.isActive = false;
-				}
-			});
-			console.log(`[MTF Lotes] Desativando outros lotes ao ativar lote ${id}`);
-		}
-
-		// Atualizar o lote com os dados fornecidos
-		lotes[loteIndex] = {
-			...lotes[loteIndex],
-			numero: numero !== undefined ? parseInt(numero) : lotes[loteIndex].numero,
-			nome: nome || lotes[loteIndex].nome,
-			valor: valor ? normalizeValor(valor) : lotes[loteIndex].valor,
-			dataInicio: dataInicio || lotes[loteIndex].dataInicio,
-			dataFim: dataFim || lotes[loteIndex].dataFim,
-			isActive: isActive !== undefined ? isActive : lotes[loteIndex].isActive,
-		};
-
-		// Salvar as alterações
-		await getPrismaInstance().mtfDiamanteVariavel.update({
-			where: { id: lotesVariavel.id },
-			data: { valor: lotes as any },
-		});
-
-		// Invalidar cache das variáveis (incluindo lotes) - força reload das variáveis no frontend
-		try {
-			const { getRedisInstance } = await import("@/lib/connections");
-			const redis = getRedisInstance();
-
-			// Invalidar cache de variáveis para este usuário
-			await redis.del(`mtf_variables:${session.user.id}`);
-			await redis.del(`mtf_lotes:${session.user.id}`);
-
-			console.log(`[MTF Lotes] Cache invalidado para usuário ${session.user.id} após edição de lote`);
-		} catch (cacheError) {
-			console.warn("[MTF Lotes] Erro ao invalidar cache:", cacheError);
-			// Não falhar a operação por causa do cache
-		}
-
-		return NextResponse.json({
-			success: true,
-			data: lotes[loteIndex],
-			message: "Lote atualizado com sucesso",
-		});
-	} catch (error) {
-		console.error("Erro ao atualizar lote:", error);
-		return NextResponse.json({ error: "Erro interno" }, { status: 500 });
-	}
+export async function PATCH(
+	request: NextRequest,
+	{ params }: { params: Promise<{ id: string }> },
+) {
+	const { id } = await params;
+	return proxyPlatformAdminRequest(request, getPlatformPath(id));
 }
 
-// DELETE - Deletar lote específico
-export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-	try {
-		const session = await auth();
-		if (!session?.user?.id) {
-			return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
-		}
-
-		const { id } = await params;
-
-		// Buscar a configuração do MTF Diamante
-		const config = await getPrismaInstance().mtfDiamanteConfig.findUnique({
-			where: { userId: session.user.id },
-			include: { variaveis: true },
-		});
-
-		if (!config) {
-			return NextResponse.json({ error: "Configuração não encontrada" }, { status: 404 });
-		}
-
-		// Buscar a variável de lotes
-		const lotesVariavel = config.variaveis.find((v) => v.chave === "lotes_oab");
-
-		if (!lotesVariavel || !lotesVariavel.valor || !Array.isArray(lotesVariavel.valor)) {
-			return NextResponse.json({ error: "Lotes não encontrados" }, { status: 404 });
-		}
-
-		// Filtrar o lote a ser removido
-		const lotes: any[] = (lotesVariavel.valor as unknown as any[]).filter((l: any) => l.id !== id);
-
-		// Salvar as alterações
-		await getPrismaInstance().mtfDiamanteVariavel.update({
-			where: { id: lotesVariavel.id },
-			data: { valor: lotes as any },
-		});
-
-		// Invalidar cache das variáveis (incluindo lotes) - força reload das variáveis no frontend
-		try {
-			const { getRedisInstance } = await import("@/lib/connections");
-			const redis = getRedisInstance();
-
-			// Invalidar cache de variáveis para este usuário
-			await redis.del(`mtf_variables:${session.user.id}`);
-			await redis.del(`mtf_lotes:${session.user.id}`);
-
-			console.log(`[MTF Lotes] Cache invalidado para usuário ${session.user.id} após remoção de lote`);
-		} catch (cacheError) {
-			console.warn("[MTF Lotes] Erro ao invalidar cache:", cacheError);
-			// Não falhar a operação por causa do cache
-		}
-
-		return NextResponse.json({
-			success: true,
-			message: "Lote removido com sucesso",
-		});
-	} catch (error) {
-		console.error("Erro ao remover lote:", error);
-		return NextResponse.json({ error: "Erro interno" }, { status: 500 });
-	}
+export async function DELETE(
+	request: NextRequest,
+	{ params }: { params: Promise<{ id: string }> },
+) {
+	const { id } = await params;
+	return proxyPlatformAdminRequest(request, getPlatformPath(id));
 }
