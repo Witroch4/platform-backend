@@ -90,6 +90,11 @@ class Settings(BaseSettings):
     # Backend public URL (JusMonitorIA webhooks)
     backend_public_url: str = "https://jusmonitoria.witdev.com.br"
 
+    # --- Socialwise WhatsApp / Meta Business API ---
+    fb_graph_api_base: str = "https://graph.facebook.com/v22.0"
+    whatsapp_business_id: str = ""
+    whatsapp_token: str = ""
+
     # --- Socialwise legacy integration compat ---
     socialwise_webhook_url: str = Field(default="", validation_alias="WEBHOOK_URL")
     socialwise_instagram_graph_api_base: str = Field(

@@ -69,6 +69,7 @@ from domains.socialwise.db.models.template import (
 )
 from domains.socialwise.db.models.user import User
 from domains.socialwise.db.models.usuario_chatwit import UsuarioChatwit
+from domains.socialwise.db.models.whatsapp_global_config import WhatsAppGlobalConfig
 from domains.socialwise.db.models.webhook_config import WebhookConfig
 from domains.socialwise.db.models.webhook_delivery import WebhookDelivery, WebhookEvent
 
@@ -146,6 +147,8 @@ __all__ = [
     # MTF Diamante
     "MtfDiamanteConfig",
     "MtfDiamanteVariavel",
+    # WhatsApp config
+    "WhatsAppGlobalConfig",
     # Queue management
     "WebhookConfig",
     "WebhookDelivery",

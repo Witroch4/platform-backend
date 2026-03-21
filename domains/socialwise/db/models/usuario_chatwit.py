@@ -1,9 +1,11 @@
 """UsuarioChatwit model — mirror of Prisma UsuarioChatwit table."""
 
+from __future__ import annotations
+
 from typing import Optional
 
 from sqlalchemy import String
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from domains.socialwise.db.base import SocialwiseModel
 
@@ -20,6 +22,13 @@ class UsuarioChatwit(SocialwiseModel):
         "chatwitAccessToken", String, unique=True, nullable=True,
     )
     chatwit_account_id: Mapped[str] = mapped_column("chatwitAccountId", String, nullable=False)
+
+    whatsapp_global_config: Mapped[Optional["WhatsAppGlobalConfig"]] = relationship(
+        "WhatsAppGlobalConfig",
+        back_populates="usuario_chatwit",
+        uselist=False,
+        lazy="selectin",
+    )
 
     def __repr__(self) -> str:
         return f"<UsuarioChatwit(id={self.id}, name={self.name})>"
