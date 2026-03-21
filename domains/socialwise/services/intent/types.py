@@ -132,6 +132,7 @@ class ProcessorContext:
     assistant_id: str | None = None
     original_payload: dict[str, Any] | None = None
     agent_supplement: str | None = None
+    blocked_intent_slug: str | None = None
     session_ttl_seconds: int | None = None
     session_ttl_dev_seconds: int | None = None
 

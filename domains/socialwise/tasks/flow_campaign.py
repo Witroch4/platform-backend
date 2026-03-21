@@ -19,10 +19,14 @@ from domains.socialwise.db.models.flow import Flow
 from domains.socialwise.db.models.flow_campaign import (
     FlowCampaign,
     FlowCampaignContact,
+    FlowCampaignContactStatus,
+    FlowCampaignStatus,
 )
 from domains.socialwise.db.session_compat import session_ctx
 from domains.socialwise.services.flow.chatwit_config import get_chatwit_system_config
 from domains.socialwise.services.flow.conversation_resolver import ChatwitConversationResolver
+from domains.socialwise.services.flow.delivery_service import DeliveryContext
+from domains.socialwise.services.flow.orchestrator import FlowOrchestrator
 from platform_core.logging.config import get_logger
 from platform_core.tasks.brokers.socialwise import broker_sw as broker
 
@@ -51,7 +55,10 @@ async def check_campaign_completion(campaign_id: str) -> bool:
         pending_count = (await session.execute(
             select(func.count(FlowCampaignContact.id)).where(
                 FlowCampaignContact.campaign_id == campaign_id,
-                FlowCampaignContact.status.in_(["PENDING", "QUEUED"]),
+                FlowCampaignContact.status.in_([
+                    FlowCampaignContactStatus.PENDING,
+                    FlowCampaignContactStatus.QUEUED,
+                ]),
             ),
         )).scalar_one()
 
@@ -71,13 +78,16 @@ async def _complete_campaign(session: Any, campaign_id: str) -> None:
         .where(FlowCampaignContact.campaign_id == campaign_id)
         .group_by(FlowCampaignContact.status),
     )
-    counts = {row[0]: row[1] for row in counts_result.all()}
+    counts = {
+        (row[0].value if isinstance(row[0], FlowCampaignContactStatus) else str(row[0])): row[1]
+        for row in counts_result.all()
+    }
 
     await session.execute(
         update(FlowCampaign)
         .where(FlowCampaign.id == campaign_id)
         .values(
-            status="COMPLETED",
+            status=FlowCampaignStatus.COMPLETED,
             completed_at=datetime.now(timezone.utc),
             sent_count=counts.get("SENT", 0),
             failed_count=counts.get("FAILED", 0),
@@ -125,7 +135,7 @@ async def _process_batch(
                 await session.execute(
                     update(FlowCampaignContact)
                     .where(FlowCampaignContact.id == contact_db_id)
-                    .values(status="QUEUED"),
+                    .values(status=FlowCampaignContactStatus.QUEUED),
                 )
 
                 # Enqueue individual EXECUTE_CONTACT task
@@ -184,7 +194,7 @@ async def _handle_execute_contact(job_data: dict[str, Any]) -> dict[str, Any]:
             await session.execute(
                 update(FlowCampaignContact)
                 .where(FlowCampaignContact.id == contact_id)
-                .values(status="SKIPPED", error_message="Contato sem telefone"),
+                .values(status=FlowCampaignContactStatus.SKIPPED, error_message="Contato sem telefone"),
             )
             await session.execute(
                 update(FlowCampaign)
@@ -212,20 +222,59 @@ async def _handle_execute_contact(job_data: dict[str, Any]) -> dict[str, Any]:
         contact_phone=contact_phone,
     )
 
-    # NOTE: In the TS version, this calls FlowOrchestrator.executeFlowById() which
-    # stays in the Next.js process. For Python, we enqueue a flow execution via the
-    # flow_builder task with the resolved context. The actual flow orchestration
-    # still happens in Next.js (B.6 migration scope), so we call the Next.js
-    # webhook/API to trigger the flow execution.
-    #
-    # For now, we mark the contact as SENT after resolving the conversation.
-    # Full flow execution integration will be completed in B.6.
+    delivery_context = DeliveryContext(
+        account_id=int(inbox.usuario_chatwit.chatwit_account_id or 0),
+        conversation_id=resolved.conversation_id,
+        conversation_display_id=resolved.display_id,
+        inbox_id=int(inbox.inbox_id),
+        contact_id=resolved.contact_id,
+        contact_name=contact_name or "",
+        contact_phone=contact_phone or "",
+        channel_type=inbox.channel_type or "whatsapp",
+        prisma_inbox_id=inbox.id,
+        chatwit_access_token=chatwit_config.bot_token,
+        chatwit_base_url=chatwit_config.base_url,
+    )
+
+    orchestrator = FlowOrchestrator()
+    flow_result = await orchestrator.execute_flow_by_id(
+        flow_id,
+        delivery_context,
+        force_async=True,
+        initial_variables=variables if isinstance(variables, dict) else None,
+    )
+
+    if flow_result.error:
+        async with session_ctx() as session:
+            await session.execute(
+                update(FlowCampaignContact)
+                .where(FlowCampaignContact.id == contact_id)
+                .values(status=FlowCampaignContactStatus.FAILED, error_message=flow_result.error),
+            )
+            await session.execute(
+                update(FlowCampaign)
+                .where(FlowCampaign.id == campaign_id)
+                .values(failed_count=FlowCampaign.failed_count + 1),
+            )
+            await session.commit()
+        await check_campaign_completion(campaign_id)
+        return {
+            "success": False,
+            "jobType": "EXECUTE_CONTACT",
+            "campaignId": campaign_id,
+            "contactId": contact_id,
+            "error": flow_result.error,
+        }
 
     async with session_ctx() as session:
         await session.execute(
             update(FlowCampaignContact)
             .where(FlowCampaignContact.id == contact_id)
-            .values(status="SENT", sent_at=datetime.now(timezone.utc)),
+            .values(
+                status=FlowCampaignContactStatus.SENT,
+                sent_at=datetime.now(timezone.utc),
+                session_id=flow_result.session_id,
+            ),
         )
         await session.execute(
             update(FlowCampaign)
@@ -242,6 +291,7 @@ async def _handle_execute_contact(job_data: dict[str, Any]) -> dict[str, Any]:
         "campaignId": campaign_id,
         "contactId": contact_id,
         "conversationId": resolved.conversation_id,
+        "sessionId": flow_result.session_id,
     }
 
 
@@ -282,7 +332,7 @@ async def _handle_campaign_control(job_data: dict[str, Any]) -> dict[str, Any]:
             await session.execute(
                 update(FlowCampaign)
                 .where(FlowCampaign.id == campaign_id)
-                .values(status="PAUSED", paused_at=datetime.now(timezone.utc)),
+                .values(status=FlowCampaignStatus.PAUSED, paused_at=datetime.now(timezone.utc)),
             )
             await session.commit()
 
@@ -291,16 +341,19 @@ async def _handle_campaign_control(job_data: dict[str, Any]) -> dict[str, Any]:
             await session.execute(
                 update(FlowCampaign)
                 .where(FlowCampaign.id == campaign_id)
-                .values(status="CANCELLED", completed_at=datetime.now(timezone.utc)),
+                .values(status=FlowCampaignStatus.CANCELLED, completed_at=datetime.now(timezone.utc)),
             )
             # Mark pending contacts as SKIPPED
             await session.execute(
                 update(FlowCampaignContact)
                 .where(
                     FlowCampaignContact.campaign_id == campaign_id,
-                    FlowCampaignContact.status.in_(["PENDING", "QUEUED"]),
+                    FlowCampaignContact.status.in_([
+                        FlowCampaignContactStatus.PENDING,
+                        FlowCampaignContactStatus.QUEUED,
+                    ]),
                 )
-                .values(status="SKIPPED", error_message=reason or "Campanha cancelada"),
+                .values(status=FlowCampaignContactStatus.SKIPPED, error_message=reason or "Campanha cancelada"),
             )
             await session.commit()
 
@@ -309,7 +362,7 @@ async def _handle_campaign_control(job_data: dict[str, Any]) -> dict[str, Any]:
             await session.execute(
                 update(FlowCampaign)
                 .where(FlowCampaign.id == campaign_id)
-                .values(status="RUNNING", paused_at=None),
+                .values(status=FlowCampaignStatus.RUNNING, paused_at=None),
             )
             await session.commit()
 
@@ -378,7 +431,7 @@ async def process_flow_campaign_task(job_data: dict[str, Any]) -> dict[str, Any]
                             update(FlowCampaignContact)
                             .where(FlowCampaignContact.id == contact_id)
                             .values(
-                                status="FAILED",
+                                status=FlowCampaignContactStatus.FAILED,
                                 error_message=str(exc)[:500],
                             ),
                         )

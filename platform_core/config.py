@@ -174,7 +174,10 @@ class Settings(BaseSettings):
     chatwit_api_url: str = "https://api.chatwit.com/v1"
     chatwit_api_key: str = ""
     chatwit_webhook_secret: str = ""
+    chatwit_base_url: str = ""
+    chatwit_agent_bot_token: str = ""
     chatwit_rate_limit_per_minute: int = 100
+    socialwiseflow_access_token: str = ""
 
     # Taskiq
     taskiq_workers: int = 4

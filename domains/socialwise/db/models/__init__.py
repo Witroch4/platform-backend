@@ -36,7 +36,17 @@ from domains.socialwise.db.models.flow_campaign import (
     FlowCampaignStatus,
 )
 from domains.socialwise.db.models.flow_session import FlowSession, FlowSessionStatus
+from domains.socialwise.db.models.interactive_content import (
+    ActionCtaUrl,
+    ActionReplyButton,
+    Body,
+    Footer,
+    Header,
+    InteractiveContent,
+    WhatsAppOfficialInfo,
+)
 from domains.socialwise.db.models.lead import Lead, LeadSource
+from domains.socialwise.db.models.lead_payment import LeadPayment, PaymentServiceType, PaymentStatus
 from domains.socialwise.db.models.lead_automacao import LeadAutomacao
 from domains.socialwise.db.models.lead_instagram_profile import LeadInstagramProfile
 from domains.socialwise.db.models.lead_oab_data import LeadOabData
@@ -76,6 +86,9 @@ __all__ = [
     # Lead
     "Lead",
     "LeadSource",
+    "LeadPayment",
+    "PaymentServiceType",
+    "PaymentStatus",
     "LeadInstagramProfile",
     "LeadAutomacao",
     "LeadOabData",
@@ -99,6 +112,13 @@ __all__ = [
     "FlowCampaignContact",
     "FlowCampaignStatus",
     "FlowCampaignContactStatus",
+    "InteractiveContent",
+    "Header",
+    "Body",
+    "Footer",
+    "ActionCtaUrl",
+    "ActionReplyButton",
+    "WhatsAppOfficialInfo",
     # Agendamento
     "Agendamento",
     "Midia",

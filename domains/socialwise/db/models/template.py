@@ -5,7 +5,7 @@ from typing import Optional
 
 from sqlalchemy import Boolean, Index, Integer, String
 from sqlalchemy.dialects.postgresql import ARRAY
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from domains.socialwise.db.base import SocialwiseModel
 
@@ -48,6 +48,23 @@ class Template(SocialwiseModel):
     simple_reply_text: Mapped[Optional[str]] = mapped_column("simpleReplyText", String, nullable=True)
     created_by_id: Mapped[str] = mapped_column("createdById", String(30), nullable=False)
     inbox_id: Mapped[Optional[str]] = mapped_column("inboxId", String(30), nullable=True)
+    interactive_content: Mapped[Optional["InteractiveContent"]] = relationship(
+        "InteractiveContent",
+        back_populates="template",
+        uselist=False,
+        lazy="selectin",
+    )
+    whatsapp_official_info: Mapped[Optional["WhatsAppOfficialInfo"]] = relationship(
+        "WhatsAppOfficialInfo",
+        back_populates="template",
+        uselist=False,
+        lazy="selectin",
+    )
+    mappings: Mapped[list["MapeamentoIntencao"]] = relationship(
+        "MapeamentoIntencao",
+        back_populates="template",
+        lazy="selectin",
+    )
 
     def __repr__(self) -> str:
         return f"<Template(id={self.id}, name={self.name}, type={self.type})>"

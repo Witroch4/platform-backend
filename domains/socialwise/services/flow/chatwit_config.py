@@ -36,6 +36,12 @@ _cached: ChatwitSystemConfigResult | None = None
 _cached_at: float = 0.0
 
 
+def invalidate_chatwit_system_config_cache() -> None:
+    global _cached, _cached_at
+    _cached = None
+    _cached_at = 0.0
+
+
 async def get_chatwit_system_config() -> ChatwitSystemConfigResult:
     """Return bot token and base URL for Chatwit."""
     global _cached, _cached_at
@@ -76,3 +82,40 @@ async def get_chatwit_system_config() -> ChatwitSystemConfigResult:
             bot_token=getattr(settings, "chatwit_agent_bot_token", "") or "",
             base_url=getattr(settings, "chatwit_base_url", "") or "",
         )
+
+
+async def save_chatwit_system_config(*, bot_token: str, base_url: str) -> None:
+    """Persist Chatwit agent bot token and base URL in SystemConfig."""
+    invalidate_chatwit_system_config_cache()
+    async with session_ctx() as session:
+        existing_stmt = select(SystemConfig).where(
+            SystemConfig.key.in_(["chatwit.agentBotToken", "chatwit.baseUrl"]),
+        )
+        rows = (await session.execute(existing_stmt)).scalars().all()
+        token_row = next((row for row in rows if row.key == "chatwit.agentBotToken"), None)
+        url_row = next((row for row in rows if row.key == "chatwit.baseUrl"), None)
+
+        if token_row:
+            token_row.value = {"token": bot_token}
+        else:
+            session.add(
+                SystemConfig(
+                    key="chatwit.agentBotToken",
+                    value={"token": bot_token},
+                    category="chatwit",
+                    description="Agent Bot token cached from Chatwit init/webhook",
+                )
+            )
+
+        if url_row:
+            url_row.value = {"url": base_url}
+        else:
+            session.add(
+                SystemConfig(
+                    key="chatwit.baseUrl",
+                    value={"url": base_url},
+                    category="chatwit",
+                    description="Chatwit base URL cached from init/webhook",
+                )
+            )
+        await session.commit()

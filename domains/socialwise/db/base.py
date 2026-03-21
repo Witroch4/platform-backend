@@ -9,7 +9,7 @@ import secrets
 import string
 import time
 from itertools import count
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy import DateTime, String, func
@@ -56,6 +56,10 @@ class SocialwiseBase(DeclarativeBase):
     """
 
 
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
+
+
 class SocialwiseModel(SocialwiseBase):
     """Base model with CUID pk + timestamps for Socialwise domain.
 
@@ -76,14 +80,16 @@ class SocialwiseModel(SocialwiseBase):
     created_at: Mapped[datetime] = mapped_column(
         "createdAt",
         DateTime(timezone=True),
+        default=_utcnow,
         server_default=func.now(),
         nullable=False,
     )
     updated_at: Mapped[datetime] = mapped_column(
         "updatedAt",
         DateTime(timezone=True),
+        default=_utcnow,
         server_default=func.now(),
-        onupdate=func.now(),
+        onupdate=_utcnow,
         nullable=False,
     )
 

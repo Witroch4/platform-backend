@@ -177,11 +177,19 @@ async def process_socialwise_intent(
         )
         return ProcessorResult(classification=classification, response=response)
 
+    router_hints = classification.candidates
+    if context.blocked_intent_slug:
+        router_hints = [
+            candidate
+            for candidate in classification.candidates
+            if candidate.slug != context.blocked_intent_slug
+        ]
+
     selected_intent, response, action = await process_router_band(
         context.user_text,
         assistant,
         channel_type=context.channel_type,
-        intent_hints=classification.candidates,
+        intent_hints=router_hints,
         supplemental_context=context.agent_supplement,
     )
     return ProcessorResult(

@@ -54,6 +54,11 @@ class Lead(SocialwiseModel):
         back_populates="lead",
         lazy="selectin",
     )
+    payments: Mapped[list["LeadPayment"]] = relationship(
+        "LeadPayment",
+        back_populates="lead",
+        lazy="selectin",
+    )
 
     def __repr__(self) -> str:
         return f"<Lead(id={self.id}, source={self.source}, phone={self.phone})>"

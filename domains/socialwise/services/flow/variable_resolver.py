@@ -31,7 +31,7 @@ class VariableResolver:
 
     def __init__(
         self,
-        context: dict[str, Any],
+        context: Any,
         session_variables: dict[str, Any] | None = None,
     ) -> None:
         self._ctx = context
@@ -79,12 +79,12 @@ class VariableResolver:
             {"name": "system_timestamp", "value": now.isoformat(), "source": "system"},
             {"name": "system_date", "value": now.strftime("%d/%m/%Y"), "source": "system"},
             {"name": "system_time", "value": now.strftime("%H:%M:%S"), "source": "system"},
-            {"name": "contact_name", "value": str(self._ctx.get("contact_name", "")), "source": "contact"},
-            {"name": "contact_phone", "value": str(self._ctx.get("contact_phone", "")), "source": "contact"},
-            {"name": "contact_id", "value": str(self._ctx.get("contact_id", "")), "source": "contact"},
-            {"name": "conversation_id", "value": str(self._ctx.get("conversation_id", "")), "source": "conversation"},
-            {"name": "conversation_channel", "value": str(self._ctx.get("channel_type", "")), "source": "conversation"},
-            {"name": "conversation_inbox_id", "value": str(self._ctx.get("inbox_id", "")), "source": "conversation"},
+            {"name": "contact_name", "value": str(self._ctx_get("contact_name", "")), "source": "contact"},
+            {"name": "contact_phone", "value": str(self._ctx_get("contact_phone", "")), "source": "contact"},
+            {"name": "contact_id", "value": str(self._ctx_get("contact_id", "")), "source": "contact"},
+            {"name": "conversation_id", "value": str(self._ctx_get("conversation_id", "")), "source": "conversation"},
+            {"name": "conversation_channel", "value": str(self._ctx_get("channel_type", "")), "source": "conversation"},
+            {"name": "conversation_inbox_id", "value": str(self._ctx_get("inbox_id", "")), "source": "conversation"},
         ]
         for key, value in self._session_vars.items():
             variables.append({
@@ -128,18 +128,18 @@ class VariableResolver:
 
     def _lookup_contact(self, field: str) -> Any:
         contact_map = {
-            "name": self._ctx.get("contact_name"),
-            "phone": self._ctx.get("contact_phone"),
-            "id": self._ctx.get("contact_id"),
+            "name": self._ctx_get("contact_name"),
+            "phone": self._ctx_get("contact_phone"),
+            "id": self._ctx_get("contact_id"),
         }
         return contact_map.get(field)
 
     def _lookup_conversation(self, field: str) -> Any:
         conv_map = {
-            "id": self._ctx.get("conversation_id"),
-            "channel": self._ctx.get("channel_type"),
-            "inbox_id": self._ctx.get("inbox_id"),
-            "account_id": self._ctx.get("account_id"),
+            "id": self._ctx_get("conversation_id"),
+            "channel": self._ctx_get("channel_type"),
+            "inbox_id": self._ctx_get("inbox_id"),
+            "account_id": self._ctx_get("account_id"),
         }
         return conv_map.get(field)
 
@@ -163,6 +163,13 @@ class VariableResolver:
                 return None
             current = current.get(part)
         return current
+
+    def _ctx_get(self, key: str, default: Any = None) -> Any:
+        if isinstance(self._ctx, dict):
+            return self._ctx.get(key, default)
+        if hasattr(self._ctx, key):
+            return getattr(self._ctx, key, default)
+        return default
 
 
 def _now_br() -> datetime:

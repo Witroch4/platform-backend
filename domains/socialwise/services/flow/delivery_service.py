@@ -70,6 +70,7 @@ class DeliveryPayload:
     private: bool = False
     emoji: str | None = None
     target_message_id: str | None = None
+    context_message_id: str | None = None
     action_type: str | None = None
     contact_fields: dict[str, Any] | None = None
     contact_id: int | None = None

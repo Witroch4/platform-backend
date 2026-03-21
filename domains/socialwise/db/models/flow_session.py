@@ -4,7 +4,7 @@ import enum
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import DateTime, ForeignKey, Index, String
+from sqlalchemy import DateTime, Enum, ForeignKey, Index, String
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -37,7 +37,17 @@ class FlowSession(SocialwiseModel):
     conversation_id: Mapped[str] = mapped_column("conversationId", String, nullable=False)
     contact_id: Mapped[str] = mapped_column("contactId", String, nullable=False)
     inbox_id: Mapped[str] = mapped_column("inboxId", String, nullable=False)
-    status: Mapped[str] = mapped_column(String, nullable=False, default=FlowSessionStatus.ACTIVE.value)
+    status: Mapped[FlowSessionStatus] = mapped_column(
+        Enum(
+            FlowSessionStatus,
+            name="FlowSessionStatus",
+            native_enum=True,
+            create_type=False,
+            validate_strings=True,
+        ),
+        nullable=False,
+        default=FlowSessionStatus.ACTIVE,
+    )
     current_node_id: Mapped[Optional[str]] = mapped_column("currentNodeId", String(30), nullable=True)
     variables: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict, server_default="{}")
     execution_log: Mapped[list] = mapped_column("executionLog", JSONB, nullable=False, default=list, server_default="[]")

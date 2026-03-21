@@ -18,7 +18,12 @@ class MapeamentoIntencao(SocialwiseModel):
 
     intent_name: Mapped[str] = mapped_column("intentName", String, nullable=False)
     inbox_id: Mapped[str] = mapped_column("inboxId", String(30), nullable=False)
-    template_id: Mapped[Optional[str]] = mapped_column("templateId", String(30), nullable=True)
+    template_id: Mapped[Optional[str]] = mapped_column(
+        "templateId",
+        String(30),
+        ForeignKey("Template.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     flow_id: Mapped[Optional[str]] = mapped_column(
         "flowId", String(30),
         ForeignKey("Flow.id", ondelete="SET NULL"),
@@ -26,8 +31,13 @@ class MapeamentoIntencao(SocialwiseModel):
     )
     custom_variables: Mapped[Optional[dict]] = mapped_column("customVariables", JSONB, nullable=True)
 
-    # Relationship to Flow
+    # Relationships
     flow: Mapped[Optional["Flow"]] = relationship("Flow", back_populates="mapeamentos", lazy="selectin")
+    template: Mapped[Optional["Template"]] = relationship(
+        "Template",
+        back_populates="mappings",
+        lazy="selectin",
+    )
 
     def __repr__(self) -> str:
         return f"<MapeamentoIntencao(id={self.id}, intent={self.intent_name}, flowId={self.flow_id})>"

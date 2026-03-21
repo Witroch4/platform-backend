@@ -4,7 +4,7 @@ import enum
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import DateTime, ForeignKey, Index, Integer, String
+from sqlalchemy import DateTime, Enum, ForeignKey, Index, Integer, String
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -43,7 +43,17 @@ class FlowCampaign(SocialwiseModel):
         nullable=False,
     )
     inbox_id: Mapped[str] = mapped_column("inboxId", String, nullable=False)
-    status: Mapped[str] = mapped_column(String, nullable=False, default=FlowCampaignStatus.DRAFT.value)
+    status: Mapped[FlowCampaignStatus] = mapped_column(
+        Enum(
+            FlowCampaignStatus,
+            name="FlowCampaignStatus",
+            native_enum=True,
+            create_type=False,
+            validate_strings=True,
+        ),
+        nullable=False,
+        default=FlowCampaignStatus.DRAFT,
+    )
     scheduled_at: Mapped[Optional[datetime]] = mapped_column("scheduledAt", DateTime(timezone=True), nullable=True)
     started_at: Mapped[Optional[datetime]] = mapped_column("startedAt", DateTime(timezone=True), nullable=True)
     completed_at: Mapped[Optional[datetime]] = mapped_column("completedAt", DateTime(timezone=True), nullable=True)
@@ -84,7 +94,17 @@ class FlowCampaignContact(SocialwiseBase):
     contact_id: Mapped[str] = mapped_column("contactId", String, nullable=False)
     contact_phone: Mapped[Optional[str]] = mapped_column("contactPhone", String, nullable=True)
     contact_name: Mapped[Optional[str]] = mapped_column("contactName", String, nullable=True)
-    status: Mapped[str] = mapped_column(String, nullable=False, default=FlowCampaignContactStatus.PENDING.value)
+    status: Mapped[FlowCampaignContactStatus] = mapped_column(
+        Enum(
+            FlowCampaignContactStatus,
+            name="FlowCampaignContactStatus",
+            native_enum=True,
+            create_type=False,
+            validate_strings=True,
+        ),
+        nullable=False,
+        default=FlowCampaignContactStatus.PENDING,
+    )
     session_id: Mapped[Optional[str]] = mapped_column("sessionId", String(30), nullable=True)
     sent_at: Mapped[Optional[datetime]] = mapped_column("sentAt", DateTime(timezone=True), nullable=True)
     error_message: Mapped[Optional[str]] = mapped_column("errorMessage", String, nullable=True)
