@@ -1,79 +1,71 @@
 services:
-  postgres:
-    image: pgvector/pgvector:pg17
-    container_name: chatwit_postgres
-    environment:
-      POSTGRES_DB: socialwise
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-    ports:
-      - "5432:5432"
-    volumes:
-      - pg_data:/var/lib/postgresql/data
-    networks: [minha_rede]
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  redis:
-    image: redis:7-alpine
-    container_name: chatwit_redis
-    command: redis-server --appendonly yes
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    networks: [minha_rede]
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  app:
-    image: witrocha/socialwise:latest
-    container_name: chatwit_prod
+  platform-api:
     build:
       context: .
-      dockerfile: Dockerfile.prod
-      args:
-        # ► DURANTE O BUILD (SSG/ISR) use o postgres local
-        DATABASE_URL: postgresql://postgres:postgres@host.docker.internal:5432/socialwise?schema=public
-        REDIS_HOST: host.docker.internal
-        REDIS_PORT: 6379
-        REDIS_URL: redis://host.docker.internal:6379
-      # ► Faz "host.docker.internal" existir dentro do builder
-      extra_hosts:
-        - "host.docker.internal=host-gateway"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    env_file:
-      - .env.production
-    environment:
-      NODE_ENV: production
-      # ► Em runtime, use os nomes dos serviços na rede do Compose
-      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/socialwise?schema=public
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
-    ports:
-      - "3002:3002"
+      dockerfile: Dockerfile
+    container_name: platform-api
+    command: uvicorn platform_core.app:create_app --factory --host 0.0.0.0 --port 8000 --reload
+    env_file: .env
     volumes:
-      - ./temp:/app/temp
-    networks: [minha_rede]
-    restart: unless-stopped
+      - .:/app
+    ports:
+      - "8000:8000"
+    networks:
+      - minha_rede
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
 
-volumes:
-  pg_data:
-    driver: local
-  redis_data:
-    driver: local
+  platform-worker-jusmonitoria:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: platform-worker-jm
+    command: >
+      taskiq worker platform_core.tasks.brokers.jusmonitoria:broker_jm
+      --tasks-pattern "domains/jusmonitoria/tasks/**/*.py"
+    env_file: .env
+    environment:
+      PYTHONPATH: /app
+    volumes:
+      - .:/app
+    networks:
+      - minha_rede
+
+  platform-worker-socialwise:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: platform-worker-sw
+    command: >
+      taskiq worker platform_core.tasks.brokers.socialwise:broker_sw
+      --tasks-pattern "domains/socialwise/tasks/**/*.py"
+    env_file: .env
+    environment:
+      PYTHONPATH: /app
+    volumes:
+      - .:/app
+    networks:
+      - minha_rede
+
+  platform-scheduler-socialwise:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: platform-scheduler-sw
+    command: >
+      taskiq scheduler domains.socialwise.tasks.scheduler:scheduler
+      --tasks-pattern "domains/socialwise/tasks/**/*.py"
+    env_file: .env
+    environment:
+      PYTHONPATH: /app
+    volumes:
+      - .:/app
+    networks:
+      - minha_rede
 
 networks:
   minha_rede:

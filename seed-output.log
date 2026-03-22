@@ -1,8 +1,0 @@
-
-> socialwise@0.2.0 db:seed /home/wital/Chatwit-Social-dev
-> prisma db seed
-
-Loaded Prisma config from prisma.config.ts.
-
-Prisma config detected, skipping environment variable loading.
-

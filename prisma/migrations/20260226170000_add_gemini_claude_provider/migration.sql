@@ -1,3 +1,0 @@
--- AlterEnum
-ALTER TYPE "Provider" ADD VALUE 'GEMINI';
-ALTER TYPE "Provider" ADD VALUE 'CLAUDE';

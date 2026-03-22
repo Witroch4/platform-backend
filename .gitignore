@@ -1,80 +1,16 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
-
-# Backups de banco de dados
-*.sql.gz
-*.sql.bz2
-backup-*.sql
-backup-*.dump
-
-# Arquivos de ambiente (exceto exemplos)
-#.env
-#.env.local
-#.env.development
-#.env.production
-
-# Permitir apenas o arquivo de exemplo
-!.env.example
-
-# dependencies
-/node_modules
-/.pnp
-.pnp.js
-.yarn/install-state.gz
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
 .env
-.env.development
-.env.development.ngrok
-.env.local
-.env.production
-.env.temp
-.env.example
-# testing
-/coverage
-
-# next.js
-/.next/
-/out/
-
-# production
-/build
-/dist
-
-# misc
-.DS_Store
-*.pem
-wit-last-commit.txt
-
-# debug
-docker-compose-produção.yaml
-compose-produção.yaml
-docker-compose-deploy-portainer-sworm.yml
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# local env files
-.env*.local
-
-# vercel
-.vercel
-
-# typescript
-*.tsbuildinfo
-next-env.d.ts
-
-# Secrets and sensitive files
-id_rsa.v3
-/ssh-mcp/
-
-# Screenshots / debug images
-.playwright-mcp/
-temp/
-*.png
-*.jpg
-*.jpeg
-!public/**/*.png
-!public/**/*.jpg
-!public/**/*.jpeg
-!public/**/*.svg
-!assets/**/*.png
-!assets/**/*.jpg
-
+.venv/
+venv/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+*.db
