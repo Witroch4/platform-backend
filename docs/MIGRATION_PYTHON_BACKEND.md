@@ -1,9 +1,21 @@
 # Platform Backend — Plano de Migração Definitivo
 
 > **Fonte única da verdade** para a unificação de Socialwise + JusMonitorIA em um backend Python compartilhado.
-> Última atualização: 2026-03-21
+> Última atualização: 2026-03-22
 
 ## Changelog
+
+### 2026-03-22
+
+- **Seção C.1 concluída**: Auth compartilhado extraído para `platform_core/auth/` — `jwt.py` (TokenPayload, TokenData, create/verify tokens), `password.py` (bcrypt hash/verify), `dependencies.py` (get_token_data, inject_token_state, require_api_key). JusMonitorIA auth files convertidos para thin re-exports. Zero quebra de imports existentes.
+- **Seção C.3 concluída (parcial — sem chatwit_client)**: Services compartilhados extraídos para `platform_core/services/`:
+  - `storage.py` — S3/MinIO wrapper (presigned URLs, upload/download, delete, exists). Migrado de `logging` para `structlog`.
+  - `email.py` — `EmailTransport` async SMTP transport. Templates branded permanecem no domínio JusMonitorIA.
+  - `sse_manager.py` — `ConnectionManager` genérico com Protocol pattern (`RealTimeConnection`), scope keys como `str`, parameterized logging.
+- JusMonitorIA files convertidos: `services/storage.py` (re-export), `services/email_service.py` (delega para `EmailTransport`), `api/v1/websocket.py` (usa shared `ConnectionManager`).
+- **ensure_media completado** em `domains/socialwise/services/flow/admin_templates_service.py` — agora baixa mídia da Meta via httpx + Bearer token e faz upload para MinIO via `platform_core.services.storage.upload_bytes_to_s3`. O endpoint que retornava 422 agora funciona end-to-end.
+- Decisão arquitetural: `chatwit_client` **permanece domain-specific** — JusMonitorIA usa `ChatwitClient` (rate-limited, per-tenant tokens, contact CRUD), Socialwise usa `ChatwitDeliveryService` (bot token, message delivery). Padrões incompatíveis.
+- Validação: `py_compile` OK em 15 arquivos novos/alterados, zero cross-imports de `platform_core` → `domains/`.
 
 ### 2026-03-21
 
@@ -338,9 +350,10 @@ Repo: `/home/wital/platform-backend`
 
 ### Stubs (a implementar nas próximas fases)
 
-- `platform_core/auth/` — JWT + NextAuth verification (compartilhado)
+- ~~`platform_core/auth/` — JWT + NextAuth verification (compartilhado)~~ ✅ Implementado na C.1
 - ~~`platform_core/ai/` — LiteLLM config, cost tracker~~ ✅ Implementado na B.3
-- `platform_core/services/` — Storage (MinIO), email, chatwit client, SSE manager (compartilhado)
+- ~~`platform_core/services/` — Storage (MinIO), email, SSE manager (compartilhado)~~ ✅ Implementado na C.3
+- Nota: `chatwit_client` permanece domain-specific (JusMonitorIA e Socialwise usam padrões diferentes)
 
 ---
 
