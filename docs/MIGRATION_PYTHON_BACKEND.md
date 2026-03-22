@@ -7,7 +7,20 @@
 
 ### 2026-03-22
 
-> **ATENÇÃO**: A pasta `platform-backend/` neste repo é um snapshot temporário para push manual para `Witroch4/platform-backend`. Após push, deletar a pasta e commitar a remoção.
+> **ATENÇÃO**: A pasta `platform-backend/` neste repo é um snapshot temporário para push manual para `Witroch4/platform-backend`. Após push, deletar a pasta e commitar a remoção. Esta pasta transitória existe devido às limitações do Claude Code para celular (não consegue abrir workspace completo com múltiplos repos).
+
+**C.2 — AI Stack (LiteLLM + LangGraph) ✅**
+- `platform_core/ai/provider_manager.py`: ProviderManager genérico com fallback chains (default/document/daily), RateLimiter (token bucket), integração com CircuitBreaker. Domains estendem via subclass (JusMonitorIA adiciona tenant-scoped DB providers).
+- `platform_core/ai/base_agent.py`: BaseAgent ABC com execute(), _log_execution() hook, parse_json_response(). Sem dependências de domain. JusMonitorIA estende para adicionar AgentExecutionLog e tenant isolation.
+- `platform_core/ai/cost_tracker.py`: Refatorado para usar AiCostEvent (platform DB) em vez de CostEvent (socialwise DB). Elimina cross-import `domains.socialwise` → `platform_core`.
+- `platform_core/ai/__init__.py`: Exports consolidados de todo o AI stack.
+- Padrão "Copy → re-export shim" aplicado: `domains/jusmonitoria/ai/providers/litellm_config.py`, `provider_manager.py`, e `agents/base_agent.py` convertidos em thin re-exports.
+
+**C.4 — Middleware Stack ✅**
+- `platform_core/middleware/tenant.py`: TenantMiddleware extraído de `domains/jusmonitoria/middleware_tenant.py` (re-export shim criado).
+- `platform_core/app.py` `create_app()`: Stack completo registrado — CORS → GZip → Tenant (condicional: JusMonitorIA) → Security → RateLimit → Logging → Metrics → Cache → Audit → Shutdown.
+- `platform_core/middleware/__init__.py`: Exports de todos os 8 middleware.
+- `platform_core/logging/config.py`: Adicionados `bind_context` e `clear_context` aliases (usados por LoggingMiddleware).
 
 - **Seção C.1 concluída**: Auth compartilhado extraído para `platform_core/auth/` — `jwt.py` (TokenPayload, TokenData, create/verify tokens), `password.py` (bcrypt hash/verify), `dependencies.py` (get_token_data, inject_token_state, require_api_key). JusMonitorIA auth files convertidos para thin re-exports. Zero quebra de imports existentes.
 - **Seção C.3 concluída (parcial — sem chatwit_client)**: Services compartilhados extraídos para `platform_core/services/`:
@@ -1330,12 +1343,12 @@ Tarefas que podem ser feitas em paralelo com A e B.
 - [ ] Implementar `platform_core/auth/nextauth.py` (verificar JWE NextAuth — futuro, quando Socialwise migrar auth direto)
 - [ ] Implementar `platform_core/auth/middleware.py` (detecta JWT vs NextAuth vs API key — futuro)
 
-## C.2 — AI Stack (LiteLLM + LangGraph)
+## C.2 — AI Stack (LiteLLM + LangGraph) ✅
 
-- [ ] Implementar `platform_core/ai/litellm_config.py` (fallback, circuit breaker)
-- [ ] Implementar `platform_core/ai/provider_manager.py` (seleção dinâmica de provider)
-- [ ] Implementar `platform_core/ai/base_agent.py` (base class para agentes LangGraph)
-- [ ] Implementar `platform_core/ai/cost_tracker.py` (callback → ai_cost_events)
+- [x] Implementar `platform_core/ai/litellm_config.py` (fallback, circuit breaker) — CircuitBreaker, retry+jitter, call_completion/embedding/vision/structured
+- [x] Implementar `platform_core/ai/provider_manager.py` (seleção dinâmica de provider) — ProviderManager com chains default/document/daily, RateLimiter, fallback
+- [x] Implementar `platform_core/ai/base_agent.py` (base class para agentes LangGraph) — BaseAgent ABC com execute(), parse_json_response(), hook _log_execution()
+- [x] Implementar `platform_core/ai/cost_tracker.py` (callback → ai_cost_events) — Refatorado para usar AiCostEvent (platform_core), sem cross-import de domains/
 
 ## C.3 — Services Compartilhados ✅
 
@@ -1346,10 +1359,10 @@ Tarefas que podem ser feitas em paralelo com A e B.
 - [x] Socialwise `ensure_media` completado (Meta download + MinIO upload)
 - ~~chatwit_client~~ — permanece domain-specific (JusMonitorIA e Socialwise usam padrões incompatíveis)
 
-## C.4 — Middleware Stack
+## C.4 — Middleware Stack ✅
 
-- [ ] Copiar middleware do JusMonitorIA para `platform_core/middleware/`
-- [ ] Registrar stack completo no `create_app()`: CORS → GZip → Security → RateLimit → Logging → Metrics → Cache → Audit
+- [x] Copiar middleware do JusMonitorIA para `platform_core/middleware/` — TenantMiddleware extraído, domain file convertido em re-export shim
+- [x] Registrar stack completo no `create_app()`: CORS → GZip → Tenant → Security → RateLimit → Logging → Metrics → Cache → Audit → Shutdown
 
 ## C.5 — Observabilidade
 
@@ -1373,7 +1386,7 @@ Tarefas que podem ser feitas em paralelo com A e B.
 | 0 | — | Scaffold platform-backend | ✅ **CONCLUÍDA** |
 | 1 | A.1–A.5 | Mover JusMonitorIA backend | ✅ **CONCLUÍDA** (234 arquivos, 2026-03-20) |
 | 2 | A.6–A.7 | Verificação + cutover + padronização operacional JusMonitorIA | ✅ Runtime validado + scripts documentados |
-| 3 | C.1–C.4 | Infra compartilhada (auth, AI, middleware) | ✅ C.1 + C.3 concluídas, falta C.2 + C.4 |
+| 3 | C.1–C.4 | Infra compartilhada (auth, AI, middleware) | ✅ **CONCLUÍDA** — C.1 (Auth) + C.2 (AI Stack) + C.3 (Services) + C.4 (Middleware) |
 | 4 | B.1 | SQLAlchemy mirrors do Prisma | Models prontos |
 | 5 | B.2 | Workers simples (cost, agendamento, leads) | ✅ **CONCLUÍDA** — B.2.1, B.2.2 e B.2.3 concluídas |
 | 6 | B.3 | Agentes IA OAB (LangGraph + LiteLLM) | 3 agents + 3 workers migrados |
