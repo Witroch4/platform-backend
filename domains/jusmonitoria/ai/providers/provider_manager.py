@@ -1,193 +1,168 @@
-"""Dynamic AI provider management system."""
+"""Tenant-aware AI provider management — extends platform_core.
 
-import logging
-from typing import Any, Optional
+The base ProviderManager lives in platform_core/ai/provider_manager.py.
+This domain-specific version adds:
+- Tenant-scoped DB provider loading (AIProvider model)
+- AIProviderRepository integration
+- Encrypted API key handling
+"""
+
+from __future__ import annotations
+
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from domains.jusmonitoria.ai.providers.litellm_config import LLMResponse, litellm_config
-from domains.jusmonitoria.db.models.ai_provider import AIProvider
-from domains.jusmonitoria.db.repositories.ai_provider_repository import AIProviderRepository
+from platform_core.ai.litellm_config import LLMResponse
+from platform_core.ai.provider_manager import (
+    ProviderEntry,
+    ProviderManager as _BaseProviderManager,
+)
+from platform_core.logging.config import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
-class ProviderManager:
+class ProviderManager(_BaseProviderManager):
+    """Tenant-aware provider manager with DB-backed provider loading.
+
+    Extends the base ProviderManager with:
+    - Database-driven provider configs per tenant
+    - Encrypted API key decryption
+    - Usage tracking per provider
     """
-    Manages dynamic AI provider selection and routing.
-    
-    Loads provider configuration from database and handles:
-    - Provider selection by priority and availability
-    - Real-time rate limit updates
-    - Fallback routing
-    - Usage tracking
-    """
-    
+
     def __init__(
         self,
         session: AsyncSession,
         tenant_id: UUID,
-    ):
-        """
-        Initialize provider manager.
-        
-        Args:
-            session: Database session
-            tenant_id: Tenant ID for provider isolation
-        """
+    ) -> None:
+        super().__init__()
         self.session = session
         self.tenant_id = tenant_id
+        # Lazy import to avoid circular deps
+        from domains.jusmonitoria.db.repositories.ai_provider_repository import AIProviderRepository
         self.repository = AIProviderRepository(session, tenant_id)
-    
-    async def get_available_providers(self) -> list[AIProvider]:
-        """
-        Get all available providers for the tenant.
-        
-        Returns providers ordered by priority (highest first).
-        
-        Returns:
-            List of active AIProvider instances
-        """
+
+    async def get_available_providers(self) -> list:
+        """Get all active providers for the tenant, ordered by priority."""
         providers = await self.repository.get_active_providers(
             order_by_priority=True
         )
-        
         if not providers:
             logger.warning(
-                "No active AI providers configured for tenant",
-                extra={"tenant_id": str(self.tenant_id)},
+                "no_db_providers",
+                tenant_id=str(self.tenant_id),
             )
-        
         return providers
-    
+
     async def call_llm(
         self,
         messages: list[dict[str, str]],
-        temperature: Optional[float] = None,
-        max_tokens: Optional[int] = None,
-        use_case: str = "default",  # "default" | "document" | "daily"
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+        use_case: str = "default",
         **kwargs: Any,
     ) -> LLMResponse:
+        """Call LLM with tenant-scoped provider selection and fallback.
+
+        If DB providers are configured, uses them first. Falls back to
+        env-based chains from the base ProviderManager.
         """
-        Call LLM with automatic provider selection and fallback.
+        db_providers = await self.get_available_providers()
 
-        Args:
-            messages: List of message dicts with 'role' and 'content'
-            temperature: Override temperature
-            max_tokens: Override max tokens
-            use_case: Chain de providers — "default" (geral), "document" (petições/docs),
-                      "daily" (DataJud poller / briefing matinal)
-            **kwargs: Additional parameters for LiteLLM
+        if db_providers:
+            entries = []
+            for provider in db_providers:
+                if not provider.is_active:
+                    continue
+                entries.append(ProviderEntry(
+                    provider=provider.provider,
+                    model=provider.model,
+                    api_key=self._decrypt_api_key(provider.api_key_encrypted),
+                    temperature=temperature or float(provider.temperature),
+                    max_tokens=max_tokens or provider.max_tokens,
+                    priority=provider.priority,
+                ))
 
-        Returns:
-            LLMResponse with content and token usage metadata
+            try:
+                response = await self.call_with_fallback(
+                    messages=messages,
+                    providers=entries,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    **kwargs,
+                )
+                if db_providers:
+                    await self.repository.record_usage(db_providers[0].id)
+                    await self.session.commit()
+                return response
+            except Exception:
+                logger.warning(
+                    "db_providers_exhausted_falling_back",
+                    tenant_id=str(self.tenant_id),
+                    use_case=use_case,
+                )
 
-        Raises:
-            Exception: If all providers fail
-        """
-        # Get available providers from database
-        providers = await self.get_available_providers()
-        
-        # Se não há providers no BD, litellm_config usará as chains de env vars
-        # conforme o use_case ("default", "document" ou "daily")
-        if not providers:
-            logger.warning(
-                "No DB providers configured for tenant, using env-based chain",
-                extra={"tenant_id": str(self.tenant_id), "use_case": use_case},
-            )
-        
-        # Call with fallback
-        try:
-            response = await litellm_config.call_with_fallback(
-                messages=messages,
-                providers=providers if providers else None,
-                temperature=temperature,
-                max_tokens=max_tokens,
-                use_case=use_case,
-                **kwargs,
-            )
-            
-            # Record usage for the first DB provider (successful one)
-            if providers:
-                await self.repository.record_usage(providers[0].id)
-                await self.session.commit()
-            
-            return response
-        
-        except Exception as e:
-            logger.error(
-                "All AI providers failed",
-                extra={
-                    "tenant_id": str(self.tenant_id),
-                    "use_case": use_case,
-                    "error": str(e),
-                },
-            )
-            raise
-    
+        # Fallback to env-based chain
+        return await self.call_with_fallback(
+            messages=messages,
+            use_case=use_case,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            **kwargs,
+        )
+
     async def generate_embedding(
         self,
         text: str,
-        provider_id: Optional[UUID] = None,
+        provider_id: UUID | None = None,
+        **kwargs: Any,
     ) -> list[float]:
-        """
-        Generate embedding vector for text.
-        
-        Args:
-            text: Text to embed
-            provider_id: Optional specific provider to use
-        
-        Returns:
-            Embedding vector as list of floats
-        """
+        """Generate embedding vector for text with optional provider override."""
         provider = None
-        
+
         if provider_id:
             provider = await self.repository.get(provider_id)
         else:
-            # Use first available provider
             providers = await self.get_available_providers()
             if providers:
                 provider = providers[0]
-        
-        embedding = await litellm_config.generate_embedding(
-            text=text,
-            provider=provider,
-        )
-        
+
         if provider:
+            key = self._decrypt_api_key(provider.api_key_encrypted)
+            model = f"{provider.provider}/{provider.model}"
+            result = await super().generate_embedding(text, model=model, api_key=key)
             await self.repository.record_usage(provider.id)
             await self.session.commit()
-        
-        return embedding
-    
+            return result[0] if result else []
+
+        result = await super().generate_embedding(text)
+        return result[0] if result else []
+
+    @staticmethod
+    def _decrypt_api_key(encrypted_key: str) -> str:
+        """Decrypt API key stored with Fernet encryption."""
+        from domains.jusmonitoria.crypto import decrypt
+        try:
+            return decrypt(encrypted_key)
+        except Exception:
+            return encrypted_key
+
     async def add_provider(
         self,
         provider: str,
         model: str,
         api_key: str,
         priority: int = 0,
-        max_tokens: Optional[int] = None,
+        max_tokens: int | None = None,
         temperature: float = 0.7,
-    ) -> AIProvider:
-        """
-        Add a new AI provider configuration.
-        
-        Args:
-            provider: Provider name (openai, anthropic, google)
-            model: Model identifier
-            api_key: API key (will be encrypted)
-            priority: Priority for provider selection
-            max_tokens: Maximum tokens per request
-            temperature: Temperature for generation
-        
-        Returns:
-            Created AIProvider instance
-        """
+    ):
+        """Add a new AI provider configuration."""
         from domains.jusmonitoria.crypto import encrypt
         api_key_encrypted = encrypt(api_key)
-        
+
         new_provider = await self.repository.create(
             provider=provider,
             model=model,
@@ -197,91 +172,49 @@ class ProviderManager:
             temperature=temperature,
             is_active=True,
         )
-        
         await self.session.commit()
-        
+
         logger.info(
-            "Added new AI provider",
-            extra={
-                "tenant_id": str(self.tenant_id),
-                "provider": provider,
-                "model": model,
-                "priority": priority,
-            },
+            "provider_added",
+            tenant_id=str(self.tenant_id),
+            provider=provider,
+            model=model,
+            priority=priority,
         )
-        
         return new_provider
-    
-    async def update_provider_priority(
-        self,
-        provider_id: UUID,
-        new_priority: int,
-    ) -> Optional[AIProvider]:
-        """
-        Update provider priority for fallback ordering.
-        
-        Args:
-            provider_id: UUID of the provider
-            new_priority: New priority value (higher = preferred)
-        
-        Returns:
-            Updated AIProvider instance or None if not found
-        """
+
+    async def update_provider_priority(self, provider_id: UUID, new_priority: int):
+        """Update provider priority for fallback ordering."""
         provider = await self.repository.update_priority(
             provider_id=provider_id,
             new_priority=new_priority,
         )
-        
         if provider:
             await self.session.commit()
             logger.info(
-                "Updated provider priority",
-                extra={
-                    "tenant_id": str(self.tenant_id),
-                    "provider_id": str(provider_id),
-                    "new_priority": new_priority,
-                },
+                "provider_priority_updated",
+                tenant_id=str(self.tenant_id),
+                provider_id=str(provider_id),
+                new_priority=new_priority,
             )
-        
         return provider
-    
-    async def toggle_provider(
-        self,
-        provider_id: UUID,
-        is_active: bool,
-    ) -> Optional[AIProvider]:
-        """
-        Enable or disable a provider.
-        
-        Args:
-            provider_id: UUID of the provider
-            is_active: New active status
-        
-        Returns:
-            Updated AIProvider instance or None if not found
-        """
+
+    async def toggle_provider(self, provider_id: UUID, is_active: bool):
+        """Enable or disable a provider."""
         provider = await self.repository.toggle_active(
             provider_id=provider_id,
             is_active=is_active,
         )
-        
         if provider:
             await self.session.commit()
             logger.info(
-                f"{'Enabled' if is_active else 'Disabled'} provider",
-                extra={
-                    "tenant_id": str(self.tenant_id),
-                    "provider_id": str(provider_id),
-                },
+                "provider_toggled",
+                tenant_id=str(self.tenant_id),
+                provider_id=str(provider_id),
+                is_active=is_active,
             )
-        
         return provider
-    
+
     async def get_usage_stats(self) -> dict[str, int]:
-        """
-        Get usage statistics for all providers.
-        
-        Returns:
-            Dictionary mapping provider/model to usage count
-        """
+        """Get usage statistics for all providers."""
         return await self.repository.get_usage_stats()

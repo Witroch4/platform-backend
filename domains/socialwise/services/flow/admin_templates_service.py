@@ -886,11 +886,11 @@ async def ensure_media(
 ) -> dict[str, Any]:
     """POST /templates/ensure-media — ensure template has public media URL.
 
-    Note: The actual Meta media download + MinIO upload pipeline stays in
-    the Next.js side for now (it depends on the MinIO uploadToMinIO() helper
-    and WhatsApp Bearer token download). This endpoint checks DB state and
-    returns existing publicMediaUrl if available.
+    Downloads the header media from Meta (if it's still a transient fbcdn/
+    whatsapp.net URL) and re-uploads to MinIO so the URL is permanent.
     """
+    from platform_core.services.storage import upload_bytes_to_s3
+
     stmt = (
         select(Template)
         .options(selectinload(Template.whatsapp_official_info))
@@ -907,17 +907,62 @@ async def ensure_media(
             status_code=404,
         )
 
-    components = tpl.whatsapp_official_info.components or {}
+    info = tpl.whatsapp_official_info
+    components = info.components or {}
     existing_url = components.get("publicMediaUrl") if isinstance(components, dict) else None
 
+    # Already has a stable (non-Meta) public URL — return it
     if existing_url and not _is_meta_media_url(existing_url):
         return {"success": True, "publicMediaUrl": existing_url}
 
-    # No MinIO pipeline available in Python backend yet — return 422
-    raise TemplateServiceError(
-        "Não foi possível obter URL pública para o HEADER. Use a rota Next.js ensure-media.",
-        status_code=422,
+    # Resolve the transient Meta media URL from the HEADER component
+    header_url = _extract_header_media_url(components)
+    if not header_url:
+        raise TemplateServiceError(
+            "Template não possui HEADER com mídia.",
+            status_code=422,
+        )
+
+    # Download from Meta using the WhatsApp Bearer token
+    config = await get_whatsapp_api_config(session, user_id)
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.get(
+                header_url,
+                headers={"Authorization": f"Bearer {config.whatsapp_token}"},
+                follow_redirects=True,
+            )
+            resp.raise_for_status()
+    except httpx.HTTPError as exc:
+        logger.error("ensure_media_download_failed", url=header_url, error=str(exc))
+        raise TemplateServiceError(
+            "Falha ao baixar mídia da Meta. Tente novamente.",
+            status_code=502,
+        )
+
+    # Upload to MinIO
+    content_type = resp.headers.get("content-type", "image/jpeg")
+    ext = _mime_to_ext(content_type)
+    s3_key = f"templates/{user_id}/{meta_template_id}/header_media{ext}"
+
+    public_url = upload_bytes_to_s3(s3_key, resp.content, content_type)
+
+    # Persist the public URL in DB
+    if isinstance(components, dict):
+        components["publicMediaUrl"] = public_url
+    else:
+        components = {"publicMediaUrl": public_url}
+    info.components = components
+    await session.commit()
+
+    logger.info(
+        "ensure_media_ok",
+        meta_template_id=meta_template_id,
+        s3_key=s3_key,
+        size=len(resp.content),
     )
+    return {"success": True, "publicMediaUrl": public_url}
 
 
 # ---------------------------------------------------------------------------
@@ -941,6 +986,44 @@ def _is_meta_media_url(url: str | None) -> bool:
     if not url or not isinstance(url, str):
         return False
     return "whatsapp.net" in url or "fbcdn.net" in url or "facebook.com" in url
+
+
+def _extract_header_media_url(components: Any) -> str | None:
+    """Extract media URL from the HEADER component of a template."""
+    if not isinstance(components, dict):
+        return None
+    # Meta Graph API: components is a list under "components" key, or inline
+    comp_list = components.get("components", [])
+    if isinstance(comp_list, list):
+        for comp in comp_list:
+            if isinstance(comp, dict) and comp.get("type", "").upper() == "HEADER":
+                # Try example values first (Meta sends media URLs there)
+                example = comp.get("example", {})
+                if isinstance(example, dict):
+                    header_handle = example.get("header_handle", [])
+                    if isinstance(header_handle, list) and header_handle:
+                        return header_handle[0]
+                # Direct URL field
+                url = comp.get("url") or comp.get("media_url")
+                if url:
+                    return url
+    # Fallback: try top-level keys used by our own storage
+    return components.get("headerMediaUrl") or components.get("media_url")
+
+
+def _mime_to_ext(content_type: str) -> str:
+    """Map MIME type to a file extension."""
+    mapping = {
+        "image/jpeg": ".jpg",
+        "image/png": ".png",
+        "image/webp": ".webp",
+        "video/mp4": ".mp4",
+        "application/pdf": ".pdf",
+        "audio/ogg": ".ogg",
+        "audio/mpeg": ".mp3",
+    }
+    base = content_type.split(";")[0].strip().lower()
+    return mapping.get(base, "")
 
 
 def _template_to_dict(tpl: Template) -> dict[str, Any]:

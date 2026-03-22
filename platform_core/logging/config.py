@@ -48,3 +48,8 @@ def configure_logging(log_level: str = "INFO") -> None:
 def get_logger(name: str | None = None) -> structlog.stdlib.BoundLogger:
     """Get a structlog logger."""
     return structlog.get_logger(name)
+
+
+# Convenience aliases used by middleware and other modules
+bind_context = structlog.contextvars.bind_contextvars
+clear_context = structlog.contextvars.clear_contextvars

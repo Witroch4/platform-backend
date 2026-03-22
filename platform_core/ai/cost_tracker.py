@@ -1,13 +1,14 @@
-"""Cost tracker — records LLM token usage to CostEvent table.
+"""Cost tracker — records LLM token usage to ai_cost_events table.
 
-Port of: lib/cost/cost-worker.ts (event emission part)
+Refactored to use platform_core.db.models.AiCostEvent (shared across domains)
+instead of importing from domains.socialwise (cross-import violation).
 
-When an OAB agent completes a page/step, it calls ``track_cost()`` which
-persists a CostEvent row via the Socialwise DB session.
+When an agent completes a step, call ``track_cost()`` to persist a row.
 """
 
 from __future__ import annotations
 
+import uuid
 from datetime import datetime, timezone
 from typing import Any
 
@@ -19,42 +20,59 @@ logger = get_logger(__name__)
 async def track_cost(
     session,
     *,
-    lead_id: str,
-    stage: str,
+    domain: str,
     provider: str,
     model: str,
     input_tokens: int,
     output_tokens: int,
-    duration_ms: int,
+    duration_ms: int = 0,
+    use_case: str | None = None,
+    user_id: str | None = None,
+    tenant_id: str | None = None,
     was_fallback: bool = False,
     trace_id: str | None = None,
     metadata: dict[str, Any] | None = None,
 ) -> str | None:
-    """Persist a CostEvent row for an LLM call.
+    """Persist an AiCostEvent row for an LLM call.
 
-    Returns the event ID or None on failure.
+    Args:
+        session: SQLAlchemy AsyncSession (any database).
+        domain: Source domain ("socialwise", "jusmonitoria").
+        provider: LLM provider name.
+        model: Model identifier.
+        input_tokens: Prompt tokens.
+        output_tokens: Completion tokens.
+        duration_ms: Call duration in milliseconds.
+        use_case: Context label (e.g. "oab_transcription", "triage").
+        user_id: Optional user identifier.
+        tenant_id: Optional tenant identifier.
+        was_fallback: Whether a fallback provider was used.
+        trace_id: Optional trace/correlation ID.
+        metadata: Extra metadata dict.
+
+    Returns:
+        The event UUID or None on failure.
     """
     try:
-        from domains.socialwise.db.models.cost_event import CostEvent
-        from domains.socialwise.db.base import generate_cuid
+        from platform_core.db.models.ai_cost_event import AiCostEvent
 
-        event_id = generate_cuid()
+        event_id = str(uuid.uuid4())
         now = datetime.now(timezone.utc)
-        event = CostEvent(
+        event = AiCostEvent(
             id=event_id,
-            type=f"oab_{stage}",
+            domain=domain,
             provider=provider,
             model=model,
             input_tokens=input_tokens,
             output_tokens=output_tokens,
             total_tokens=input_tokens + output_tokens,
-            duration_ms=duration_ms,
-            status="PROCESSED",
-            metadata_json={
-                "leadId": lead_id,
-                "stage": stage,
+            use_case=use_case,
+            user_id=user_id,
+            tenant_id=tenant_id,
+            metadata_={
                 "wasFallback": was_fallback,
                 "traceId": trace_id,
+                "durationMs": duration_ms,
                 **(metadata or {}),
             },
             created_at=now,
@@ -65,14 +83,14 @@ async def track_cost(
         logger.info(
             "cost_event_tracked",
             event_id=event_id,
-            stage=stage,
+            domain=domain,
             provider=provider,
             model=model,
             tokens=input_tokens + output_tokens,
         )
         return event_id
     except Exception:
-        logger.exception("cost_event_tracking_failed", stage=stage, lead_id=lead_id)
+        logger.exception("cost_event_tracking_failed", domain=domain, use_case=use_case)
         return None
 
 
@@ -80,10 +98,10 @@ async def track_cost_batch(
     session,
     events: list[dict[str, Any]],
 ) -> list[str]:
-    """Persist multiple CostEvents in a single flush (batch).
+    """Persist multiple AiCostEvents in a single flush.
 
-    Each dict in ``events`` should have: lead_id, stage, provider, model,
-    input_tokens, output_tokens, duration_ms, was_fallback, trace_id.
+    Each dict in ``events`` should contain the keyword arguments for
+    ``track_cost()`` (domain, provider, model, input_tokens, output_tokens, etc.).
     """
     ids: list[str] = []
     for ev in events:

@@ -12,6 +12,14 @@ from platform_core.config import settings
 from platform_core.db.engines import close_all_engines
 from platform_core.domain import DomainPlugin
 from platform_core.logging.config import configure_logging, get_logger
+from platform_core.middleware.audit import AuditMiddleware
+from platform_core.middleware.cache import CacheMiddleware
+from platform_core.middleware.logging import LoggingMiddleware
+from platform_core.middleware.metrics import MetricsMiddleware
+from platform_core.middleware.rate_limit import RateLimitMiddleware
+from platform_core.middleware.security import SecurityHeadersMiddleware
+from platform_core.middleware.shutdown import ShutdownMiddleware
+from platform_core.middleware.tenant import TenantMiddleware
 from platform_core.shutdown.handler import setup_graceful_shutdown
 
 configure_logging(settings.log_level)
@@ -116,7 +124,37 @@ def create_app() -> FastAPI:
         redoc_url="/redoc",
     )
 
-    # --- Middleware (reverse order = first to execute) ---
+    # --- Middleware stack (ASGI: last added = first to execute) ---
+    # Execution order: CORS → GZip → Tenant → Security → RateLimit →
+    #                  Logging → Metrics → Cache → Audit → Shutdown → App
+
+    # Innermost (closest to app handler)
+    app.add_middleware(ShutdownMiddleware)
+    app.add_middleware(AuditMiddleware)
+
+    if settings.cache_enabled:
+        app.add_middleware(
+            CacheMiddleware,
+            default_max_age=settings.cache_default_max_age,
+            static_max_age=settings.cache_static_max_age,
+            api_max_age=settings.cache_api_max_age,
+        )
+
+    if settings.prometheus_enabled:
+        app.add_middleware(MetricsMiddleware)
+
+    app.add_middleware(LoggingMiddleware)
+
+    if settings.rate_limit_enabled:
+        app.add_middleware(RateLimitMiddleware)
+
+    if settings.security_headers_enabled:
+        app.add_middleware(SecurityHeadersMiddleware)
+
+    # Tenant isolation — only when JusMonitorIA domain is active
+    if "jusmonitoria" in settings.active_domain_list:
+        app.add_middleware(TenantMiddleware)
+
     if settings.compression_enabled:
         app.add_middleware(
             GZipMiddleware,
@@ -124,6 +162,7 @@ def create_app() -> FastAPI:
             compresslevel=settings.compression_level,
         )
 
+    # Outermost (first to execute)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
