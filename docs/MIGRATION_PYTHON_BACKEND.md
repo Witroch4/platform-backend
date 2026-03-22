@@ -7,6 +7,8 @@
 
 ### 2026-03-22
 
+> **ATENÇÃO**: A pasta `platform-backend/` neste repo é um snapshot temporário para push manual para `Witroch4/platform-backend`. Após push, deletar a pasta e commitar a remoção.
+
 - **Seção C.1 concluída**: Auth compartilhado extraído para `platform_core/auth/` — `jwt.py` (TokenPayload, TokenData, create/verify tokens), `password.py` (bcrypt hash/verify), `dependencies.py` (get_token_data, inject_token_state, require_api_key). JusMonitorIA auth files convertidos para thin re-exports. Zero quebra de imports existentes.
 - **Seção C.3 concluída (parcial — sem chatwit_client)**: Services compartilhados extraídos para `platform_core/services/`:
   - `storage.py` — S3/MinIO wrapper (presigned URLs, upload/download, delete, exists). Migrado de `logging` para `structlog`.
@@ -1319,12 +1321,14 @@ Os scripts `dev.sh` e `build.sh` do JusMonitorIA já foram adaptados para orques
 
 Tarefas que podem ser feitas em paralelo com A e B.
 
-## C.1 — Auth Unificado
+## C.1 — Auth Unificado ✅
 
-- [ ] Implementar `platform_core/auth/jwt.py` (decode JWT, verify)
-- [ ] Implementar `platform_core/auth/nextauth.py` (verificar JWE NextAuth)
-- [ ] Implementar `platform_core/auth/dependencies.py` (get_current_user, require_role)
-- [ ] Implementar `platform_core/auth/middleware.py` (detecta JWT vs NextAuth vs API key)
+- [x] Implementar `platform_core/auth/jwt.py` (decode JWT, verify) — TokenPayload, TokenData, create/verify tokens
+- [x] Implementar `platform_core/auth/password.py` (bcrypt hash/verify)
+- [x] Implementar `platform_core/auth/dependencies.py` (get_token_data, inject_token_state, require_api_key)
+- [x] JusMonitorIA auth convertido para thin re-exports (zero quebra de imports)
+- [ ] Implementar `platform_core/auth/nextauth.py` (verificar JWE NextAuth — futuro, quando Socialwise migrar auth direto)
+- [ ] Implementar `platform_core/auth/middleware.py` (detecta JWT vs NextAuth vs API key — futuro)
 
 ## C.2 — AI Stack (LiteLLM + LangGraph)
 
@@ -1333,12 +1337,14 @@ Tarefas que podem ser feitas em paralelo com A e B.
 - [ ] Implementar `platform_core/ai/base_agent.py` (base class para agentes LangGraph)
 - [ ] Implementar `platform_core/ai/cost_tracker.py` (callback → ai_cost_events)
 
-## C.3 — Services Compartilhados
+## C.3 — Services Compartilhados ✅
 
-- [ ] Implementar `platform_core/services/storage.py` (MinIO/S3)
-- [ ] Implementar `platform_core/services/email.py` (SMTP)
-- [ ] Implementar `platform_core/services/chatwit_client.py` (HTTP client Chatwit)
-- [ ] Implementar `platform_core/services/sse_manager.py` (Redis pub/sub → SSE)
+- [x] Implementar `platform_core/services/storage.py` (MinIO/S3) — presigned URLs, upload/download, structlog
+- [x] Implementar `platform_core/services/email.py` (SMTP) — EmailTransport async, domain-agnostic
+- [x] Implementar `platform_core/services/sse_manager.py` (ConnectionManager genérico, Protocol pattern)
+- [x] JusMonitorIA services convertidos (re-exports + delegation)
+- [x] Socialwise `ensure_media` completado (Meta download + MinIO upload)
+- ~~chatwit_client~~ — permanece domain-specific (JusMonitorIA e Socialwise usam padrões incompatíveis)
 
 ## C.4 — Middleware Stack
 
@@ -1367,7 +1373,7 @@ Tarefas que podem ser feitas em paralelo com A e B.
 | 0 | — | Scaffold platform-backend | ✅ **CONCLUÍDA** |
 | 1 | A.1–A.5 | Mover JusMonitorIA backend | ✅ **CONCLUÍDA** (234 arquivos, 2026-03-20) |
 | 2 | A.6–A.7 | Verificação + cutover + padronização operacional JusMonitorIA | ✅ Runtime validado + scripts documentados |
-| 3 | C.1–C.4 | Infra compartilhada (auth, AI, middleware) | Stack completo |
+| 3 | C.1–C.4 | Infra compartilhada (auth, AI, middleware) | ✅ C.1 + C.3 concluídas, falta C.2 + C.4 |
 | 4 | B.1 | SQLAlchemy mirrors do Prisma | Models prontos |
 | 5 | B.2 | Workers simples (cost, agendamento, leads) | ✅ **CONCLUÍDA** — B.2.1, B.2.2 e B.2.3 concluídas |
 | 6 | B.3 | Agentes IA OAB (LangGraph + LiteLLM) | 3 agents + 3 workers migrados |
