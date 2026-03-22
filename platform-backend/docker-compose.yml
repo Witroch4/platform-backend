@@ -1,0 +1,73 @@
+services:
+  platform-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: platform-api
+    command: uvicorn platform_core.app:create_app --factory --host 0.0.0.0 --port 8000 --reload
+    env_file: .env
+    volumes:
+      - .:/app
+    ports:
+      - "8000:8000"
+    networks:
+      - minha_rede
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  platform-worker-jusmonitoria:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: platform-worker-jm
+    command: >
+      taskiq worker platform_core.tasks.brokers.jusmonitoria:broker_jm
+      --tasks-pattern "domains/jusmonitoria/tasks/**/*.py"
+    env_file: .env
+    environment:
+      PYTHONPATH: /app
+    volumes:
+      - .:/app
+    networks:
+      - minha_rede
+
+  platform-worker-socialwise:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: platform-worker-sw
+    command: >
+      taskiq worker platform_core.tasks.brokers.socialwise:broker_sw
+      --tasks-pattern "domains/socialwise/tasks/**/*.py"
+    env_file: .env
+    environment:
+      PYTHONPATH: /app
+    volumes:
+      - .:/app
+    networks:
+      - minha_rede
+
+  platform-scheduler-socialwise:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: platform-scheduler-sw
+    command: >
+      taskiq scheduler domains.socialwise.tasks.scheduler:scheduler
+      --tasks-pattern "domains/socialwise/tasks/**/*.py"
+    env_file: .env
+    environment:
+      PYTHONPATH: /app
+    volumes:
+      - .:/app
+    networks:
+      - minha_rede
+
+networks:
+  minha_rede:
+    external: true
+    name: minha_rede
