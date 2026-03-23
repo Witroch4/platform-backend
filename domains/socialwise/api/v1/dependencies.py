@@ -16,12 +16,12 @@ from platform_core.db.sessions import get_socialwise_session
 
 @dataclass(frozen=True, slots=True)
 class AdminProxyContext:
-    """Context propagated by direct browser auth or the temporary Next.js proxy."""
+    """Authenticated admin user context (JWT cookie or Bearer token)."""
 
     user_id: str
     role: str = "DEFAULT"
     permissions: tuple[str, ...] = ()
-    auth_source: str = "proxy"
+    auth_source: str = "cookie"
 
 
 SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
@@ -37,8 +37,6 @@ async def _load_user(session: AsyncSession, user_id: str) -> User | None:
 async def get_admin_proxy_context(
     request: Request,
     session: Annotated[AsyncSession, Depends(get_socialwise_session)],
-    x_internal_api_key: Annotated[str | None, Header(alias="X-Internal-API-Key")] = None,
-    x_app_user_id: Annotated[str | None, Header(alias="X-App-User-Id")] = None,
     authorization: Annotated[str | None, Header(alias="Authorization")] = None,
     x_csrf_token: Annotated[str | None, Header(alias="X-CSRF-Token")] = None,
     session_cookie: Annotated[
@@ -50,16 +48,7 @@ async def get_admin_proxy_context(
         Cookie(alias=settings.socialwise_auth_csrf_cookie_name),
     ] = None,
 ) -> AdminProxyContext:
-    """Authorize admin requests via legacy proxy headers or FastAPI-owned JWT cookies."""
-
-    if x_internal_api_key == settings.platform_api_key and x_app_user_id:
-        user = await _load_user(session, x_app_user_id)
-        return AdminProxyContext(
-            user_id=x_app_user_id,
-            role=user.role if user else "DEFAULT",
-            permissions=(),
-            auth_source="proxy",
-        )
+    """Authorize admin requests via FastAPI-owned JWT cookies or Bearer token."""
 
     token = None
     auth_source = "cookie"

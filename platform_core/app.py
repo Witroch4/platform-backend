@@ -175,7 +175,6 @@ def create_app() -> FastAPI:
             "X-Tenant-ID",
             "X-CSRF-Token",
             "X-Internal-API-Key",
-            "X-App-User-Id",
         ],
         expose_headers=["Content-Length", "X-Request-ID"],
     )
