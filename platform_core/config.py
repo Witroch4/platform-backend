@@ -49,6 +49,14 @@ class Settings(BaseSettings):
 
     # Socialwise NextAuth
     nextauth_secret: str = ""  # AUTH_SECRET from NextAuth
+    socialwise_auth_jwt_secret: str = ""
+    socialwise_auth_cookie_name: str = "sw_platform_session"
+    socialwise_auth_csrf_cookie_name: str = "sw_platform_csrf"
+    socialwise_auth_cookie_domain: str = ""
+    socialwise_auth_cookie_path: str = "/api"
+    socialwise_auth_cookie_secure: bool = False
+    socialwise_auth_same_site: Literal["lax", "strict", "none"] = "lax"
+    socialwise_auth_access_token_expire_minutes: int = 30
 
     # Service-to-service
     platform_api_key: str = Field(default="dev-platform-api-key")
@@ -240,6 +248,10 @@ class Settings(BaseSettings):
     @property
     def active_domain_list(self) -> list[str]:
         return [d.strip() for d in self.active_domains.split(",") if d.strip()]
+
+    @property
+    def socialwise_auth_secret(self) -> str:
+        return self.socialwise_auth_jwt_secret or self.nextauth_secret or self.jwt_secret_key
 
 
 @lru_cache
