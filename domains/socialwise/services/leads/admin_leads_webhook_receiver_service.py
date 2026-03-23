@@ -40,7 +40,7 @@ async def _publish_sse(lead_id: str, payload: dict[str, Any]) -> None:
     try:
         redis = AsyncRedis.from_url(str(settings.redis_url), decode_responses=True)
         try:
-            channel = f"sse:lead:{lead_id}"
+            channel = f"sse:{lead_id}"
             await redis.publish(channel, json.dumps(payload))
         finally:
             await redis.aclose()

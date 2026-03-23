@@ -230,11 +230,11 @@ async def emit_operation_event(
         "timestamp": ts,
     }
 
-    # Publish to SSE channel (Next.js SSE manager subscribes)
+    # Publish to SSE channel (FastAPI SSE manager subscribes)
     try:
         redis = await _get_redis()
         try:
-            channel = f"sse:lead:{lead_id}"
+            channel = f"sse:{lead_id}"
             await redis.publish(channel, json.dumps(event))
         finally:
             await redis.aclose()

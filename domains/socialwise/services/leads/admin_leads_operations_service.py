@@ -145,7 +145,7 @@ async def _emit_operation_event(data: dict[str, Any]) -> None:
     event = {k: v for k, v in event.items() if v is not None}
     redis = await _get_redis()
     try:
-        channel = f"sse:lead:{lead_id}"
+        channel = f"sse:{lead_id}"
         await redis.publish(channel, json.dumps(event))
     except Exception:
         logger.warning("sse_event_publish_failed", lead_id=lead_id, exc_info=True)
@@ -157,7 +157,7 @@ async def _publish_sse(lead_id: str, payload: dict[str, Any]) -> None:
     """Publish generic SSE notification."""
     redis = await _get_redis()
     try:
-        channel = f"sse:lead:{lead_id}"
+        channel = f"sse:{lead_id}"
         await redis.publish(channel, json.dumps(payload))
     except Exception:
         logger.warning("sse_publish_failed", lead_id=lead_id, exc_info=True)

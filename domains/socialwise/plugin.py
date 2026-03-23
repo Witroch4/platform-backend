@@ -29,6 +29,7 @@ class SocialwisePlugin(DomainPlugin):
             admin_leads_operations,
             admin_leads_webhook_receiver,
             admin_mtf,
+            admin_sse,
             admin_templates,
             auth,
             tasks,
@@ -54,6 +55,7 @@ class SocialwisePlugin(DomainPlugin):
         app.include_router(admin_leads_manuscrito.router)
         app.include_router(admin_leads_operations.router)
         app.include_router(admin_leads_webhook_receiver.router)
+        app.include_router(admin_sse.router)
         app.include_router(admin_mtf.router)
         app.include_router(admin_templates.router)
         app.include_router(auth.router)
@@ -65,6 +67,9 @@ class SocialwisePlugin(DomainPlugin):
         logger.info("socialwise_domain_started")
 
     async def on_shutdown(self) -> None:
+        from domains.socialwise.services.sse.manager import get_sse_manager
+
+        await get_sse_manager().shutdown()
         logger.info("socialwise_domain_stopped")
 
 

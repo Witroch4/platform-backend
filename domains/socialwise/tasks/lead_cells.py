@@ -31,7 +31,7 @@ logger = get_logger(__name__)
 async def _publish_sse_notification(lead_id: str, payload: dict[str, Any], label: str) -> None:
     """Publish SSE notification via Redis pub/sub.
 
-    The Next.js SSE manager subscribes to `sse:lead:<leadId>` channels.
+    The SSE manager subscribes to `sse:<leadId>` channels.
     """
     try:
         import json
@@ -42,7 +42,7 @@ async def _publish_sse_notification(lead_id: str, payload: dict[str, Any], label
 
         redis = AsyncRedis.from_url(str(settings.redis_url), decode_responses=True)
         try:
-            channel = f"sse:lead:{lead_id}"
+            channel = f"sse:{lead_id}"
             await redis.publish(channel, json.dumps(payload))
             logger.info("sse_notification_sent", lead_id=lead_id, label=label)
         finally:
