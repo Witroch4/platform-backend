@@ -17,6 +17,7 @@ class User(SocialwiseModel):
 
     name: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     email: Mapped[str] = mapped_column(String, nullable=False)
+    role: Mapped[str] = mapped_column(String, nullable=False, default="DEFAULT")
     mtf_variaveis_populadas: Mapped[bool] = mapped_column(
         "mtfVariaveisPopuladas",
         Boolean,

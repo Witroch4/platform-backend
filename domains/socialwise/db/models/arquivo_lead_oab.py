@@ -26,7 +26,9 @@ class ArquivoLeadOab(SocialwiseModel):
         "chatwitFileId", Integer, unique=True, nullable=True,
     )
 
-    lead_oab_data: Mapped["LeadOabData"] = relationship("LeadOabData", lazy="selectin")
+    lead_oab_data: Mapped["LeadOabData"] = relationship(
+        "LeadOabData", back_populates="arquivos", lazy="selectin",
+    )
 
     def __repr__(self) -> str:
         return f"<ArquivoLeadOab(id={self.id}, fileType={self.file_type}, chatwitFileId={self.chatwit_file_id})>"

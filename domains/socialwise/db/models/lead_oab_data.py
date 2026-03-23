@@ -81,6 +81,11 @@ class LeadOabData(SocialwiseBase):
     # Relationships
     lead: Mapped["Lead"] = relationship("Lead", back_populates="oab_data", lazy="selectin")
     usuario_chatwit: Mapped["UsuarioChatwit"] = relationship("UsuarioChatwit", lazy="selectin")
+    arquivos: Mapped[list["ArquivoLeadOab"]] = relationship(
+        "ArquivoLeadOab",
+        back_populates="lead_oab_data",
+        lazy="selectin",
+    )
 
     def __repr__(self) -> str:
         return f"<LeadOabData(id={self.id}, leadId={self.lead_id}, concluido={self.concluido})>"
