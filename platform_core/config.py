@@ -104,6 +104,10 @@ class Settings(BaseSettings):
     socialwise_automation_base_url: str = "https://chatwit.com.br"
     socialwise_schedule_prefix: str = "socialwise:schedules"
 
+    # --- OAB eval agent feature flags ---
+    oab_agent_local: bool = Field(default=False, validation_alias="OAB_AGENT_LOCAL")
+    oab_agent_local_espelho: bool = Field(default=False, validation_alias="OAB_AGENT_LOCAL_ESPELHO")
+
     # Certificate Encryption
     encrypt_key: str = ""  # Fernet key (32 bytes base64) for encrypting PFX blobs
 

@@ -23,6 +23,7 @@ from domains.socialwise.db.models.cost_event import (
     Provider,
     Unit,
 )
+from domains.socialwise.db.models.espelho_biblioteca import EspelhoBiblioteca
 from domains.socialwise.db.models.espelho_padrao import (
     EspecialidadeJuridica,
     EspelhoPadrao,
@@ -53,6 +54,7 @@ from domains.socialwise.db.models.lead_instagram_profile import LeadInstagramPro
 from domains.socialwise.db.models.lead_oab_data import LeadOabData
 from domains.socialwise.db.models.intent import Intent, IntentActionType
 from domains.socialwise.db.models.mapeamento_botao import ActionType, MapeamentoBotao
+from domains.socialwise.db.models.oab_rubric import OabRubric
 from domains.socialwise.db.models.midia import Midia
 from domains.socialwise.db.models.mapeamento_intencao import MapeamentoIntencao
 from domains.socialwise.db.models.mtf_diamante import (
@@ -98,8 +100,11 @@ __all__ = [
     "Intent",
     "IntentActionType",
     # Espelho
+    "EspelhoBiblioteca",
     "EspelhoPadrao",
     "EspecialidadeJuridica",
+    # OAB Rubrics
+    "OabRubric",
     # Mapeamentos
     "MapeamentoBotao",
     "ActionType",
