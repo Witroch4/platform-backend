@@ -48,6 +48,7 @@ from domains.socialwise.db.models.interactive_content import (
     WhatsAppOfficialInfo,
 )
 from domains.socialwise.db.models.lead import Lead, LeadSource
+from domains.socialwise.db.models.message import Message
 from domains.socialwise.db.models.lead_payment import LeadPayment, PaymentServiceType, PaymentStatus
 from domains.socialwise.db.models.lead_automacao import LeadAutomacao
 from domains.socialwise.db.models.lead_instagram_profile import LeadInstagramProfile
@@ -86,6 +87,7 @@ __all__ = [
     "User",
     "Account",
     "Chat",
+    "Message",
     "ArquivoLeadOab",
     # Lead
     "Lead",

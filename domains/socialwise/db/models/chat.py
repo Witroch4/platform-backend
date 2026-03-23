@@ -25,6 +25,11 @@ class Chat(SocialwiseModel):
 
     lead: Mapped["Lead"] = relationship("Lead", lazy="selectin")
     account: Mapped["Account"] = relationship("Account", lazy="selectin")
+    messages: Mapped[list["Message"]] = relationship(
+        "Message",
+        back_populates="chat",
+        lazy="selectin",
+    )
 
     def __repr__(self) -> str:
         return f"<Chat(id={self.id}, leadId={self.lead_id}, accountId={self.account_id})>"
