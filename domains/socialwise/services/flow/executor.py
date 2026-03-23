@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import random
 import re
+import time
 from typing import Any
 
 import httpx
@@ -1124,7 +1125,7 @@ class FlowExecutor:
             ExecutionLogEntry(
                 node_id=node.id,
                 node_type=node.node_type,
-                timestamp=int(asyncio.get_event_loop().time() * 1000),
+                timestamp=time.time_ns() // 1_000_000,
                 duration_ms=0,
                 delivery_mode="async" if delivery_mode == "async" else "sync",
                 result="error" if result == "error" else "ok" if result == "ok" else "skipped",

@@ -17,6 +17,7 @@ class SocialwisePlugin(DomainPlugin):
 
     def register_routes(self, app: FastAPI) -> None:
         from domains.socialwise.api.v1.endpoints import (
+            admin_analytics,
             admin_campaigns,
             admin_cost,
             admin_flows,
@@ -42,6 +43,7 @@ class SocialwisePlugin(DomainPlugin):
             return {"domain": "socialwise", "status": "healthy"}
 
         app.include_router(router)
+        app.include_router(admin_analytics.router)
         app.include_router(admin_campaigns.router)
         app.include_router(admin_cost.router)
         app.include_router(admin_flows.router)
