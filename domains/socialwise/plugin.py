@@ -16,7 +16,17 @@ class SocialwisePlugin(DomainPlugin):
         return "/api/v1/socialwise"
 
     def register_routes(self, app: FastAPI) -> None:
-        from domains.socialwise.api.v1.endpoints import admin_flows, admin_mtf, admin_templates, webhook, webhook_init
+        from domains.socialwise.api.v1.endpoints import (
+            admin_campaigns,
+            admin_cost,
+            admin_flows,
+            admin_leads,
+            admin_mtf,
+            admin_templates,
+            tasks,
+            webhook,
+            webhook_init,
+        )
 
         router = APIRouter(prefix=self.get_route_prefix(), tags=["socialwise"])
 
@@ -25,9 +35,13 @@ class SocialwisePlugin(DomainPlugin):
             return {"domain": "socialwise", "status": "healthy"}
 
         app.include_router(router)
+        app.include_router(admin_campaigns.router)
+        app.include_router(admin_cost.router)
         app.include_router(admin_flows.router)
+        app.include_router(admin_leads.router)
         app.include_router(admin_mtf.router)
         app.include_router(admin_templates.router)
+        app.include_router(tasks.router)
         app.include_router(webhook.router)
         app.include_router(webhook_init.router)
 
