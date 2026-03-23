@@ -21,6 +21,7 @@ class SocialwisePlugin(DomainPlugin):
             admin_cost,
             admin_flows,
             admin_leads,
+            admin_leads_analise,
             admin_leads_manuscrito,
             admin_mtf,
             admin_templates,
@@ -40,6 +41,7 @@ class SocialwisePlugin(DomainPlugin):
         app.include_router(admin_cost.router)
         app.include_router(admin_flows.router)
         app.include_router(admin_leads.router)
+        app.include_router(admin_leads_analise.router)
         app.include_router(admin_leads_manuscrito.router)
         app.include_router(admin_mtf.router)
         app.include_router(admin_templates.router)

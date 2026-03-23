@@ -107,6 +107,8 @@ class Settings(BaseSettings):
     # --- OAB eval agent feature flags ---
     oab_agent_local: bool = Field(default=False, validation_alias="OAB_AGENT_LOCAL")
     oab_agent_local_espelho: bool = Field(default=False, validation_alias="OAB_AGENT_LOCAL_ESPELHO")
+    analise_validada_interna: bool = Field(default=False, validation_alias="ANALISE_VALIDADA_INTERNA")
+    chatwit_access_token: str = Field(default="", validation_alias="CHATWITACESSTOKEN")
 
     # Certificate Encryption
     encrypt_key: str = ""  # Fernet key (32 bytes base64) for encrypting PFX blobs

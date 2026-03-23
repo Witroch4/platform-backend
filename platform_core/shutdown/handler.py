@@ -17,6 +17,13 @@ class GracefulShutdown:
         self.force_timeout = force_timeout
         self.is_shutting_down = False
         self._callbacks: list[Callable[[], Coroutine]] = []
+        self._in_flight = 0
+
+    def increment_requests(self) -> None:
+        self._in_flight += 1
+
+    def decrement_requests(self) -> None:
+        self._in_flight = max(0, self._in_flight - 1)
 
     def register_shutdown_callback(self, callback: Callable[[], Coroutine]) -> None:
         self._callbacks.append(callback)
@@ -43,8 +50,21 @@ class GracefulShutdown:
         logger.info("graceful_shutdown_complete")
 
 
+_instance: GracefulShutdown | None = None
+
+
+def get_shutdown_handler() -> GracefulShutdown:
+    """Get or create the singleton shutdown handler."""
+    global _instance
+    if _instance is None:
+        _instance = GracefulShutdown()
+    return _instance
+
+
 def setup_graceful_shutdown(
     shutdown_timeout: float = 30.0,
     force_shutdown_timeout: float = 60.0,
 ) -> GracefulShutdown:
-    return GracefulShutdown(shutdown_timeout, force_shutdown_timeout)
+    global _instance
+    _instance = GracefulShutdown(shutdown_timeout, force_shutdown_timeout)
+    return _instance
