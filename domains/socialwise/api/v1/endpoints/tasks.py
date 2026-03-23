@@ -18,6 +18,7 @@ from domains.socialwise.tasks.agendamento import (
 from domains.socialwise.tasks.flow_builder import process_flow_builder_task
 from domains.socialwise.tasks.flow_campaign import process_flow_campaign_task
 from domains.socialwise.tasks.lead_cells import process_lead_cell_task
+from domains.socialwise.tasks.instagram_webhook import process_instagram_webhook_task
 from domains.socialwise.tasks.leads_chatwit import process_lead_chatwit_task
 from domains.socialwise.tasks.scheduler import dynamic_schedule_source
 from platform_core.auth.dependencies import require_api_key
@@ -31,7 +32,7 @@ router = APIRouter(prefix="/api/v1/socialwise/tasks", tags=["socialwise-tasks"])
 class EnqueueSocialwiseTaskRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
-    kind: Literal["flow_builder", "flow_campaign", "lead_chatwit", "lead_cell", "agendamento"]
+    kind: Literal["flow_builder", "flow_campaign", "lead_chatwit", "lead_cell", "agendamento", "instagram_webhook"]
     payload: dict[str, Any] = Field(default_factory=dict)
     action: Literal["enqueue", "cancel"] = "enqueue"
     schedule_at: datetime | None = Field(default=None, alias="scheduleAt")
@@ -143,6 +144,16 @@ async def _enqueue_agendamento(request: EnqueueSocialwiseTaskRequest) -> dict[st
     }
 
 
+async def _enqueue_instagram_webhook(request: EnqueueSocialwiseTaskRequest) -> dict[str, Any]:
+    task = await process_instagram_webhook_task.kiq(request.payload)
+    return {
+        "kind": request.kind,
+        "action": request.action,
+        "dispatch": "immediate",
+        "taskId": task.task_id,
+    }
+
+
 @router.post("/enqueue")
 async def enqueue_socialwise_task(
     request: EnqueueSocialwiseTaskRequest,
@@ -155,6 +166,7 @@ async def enqueue_socialwise_task(
             "lead_chatwit": _enqueue_lead_chatwit,
             "lead_cell": _enqueue_lead_cell,
             "agendamento": _enqueue_agendamento,
+            "instagram_webhook": _enqueue_instagram_webhook,
         }
         response = await dispatchers[request.kind](request)
         return {"success": True, **response}
