@@ -25,6 +25,8 @@ class SocialwisePlugin(DomainPlugin):
             admin_leads_arquivos,
             admin_leads_export,
             admin_leads_manuscrito,
+            admin_leads_operations,
+            admin_leads_webhook_receiver,
             admin_mtf,
             admin_templates,
             auth,
@@ -48,6 +50,8 @@ class SocialwisePlugin(DomainPlugin):
         app.include_router(admin_leads_arquivos.router)
         app.include_router(admin_leads_export.router)
         app.include_router(admin_leads_manuscrito.router)
+        app.include_router(admin_leads_operations.router)
+        app.include_router(admin_leads_webhook_receiver.router)
         app.include_router(admin_mtf.router)
         app.include_router(admin_templates.router)
         app.include_router(auth.router)

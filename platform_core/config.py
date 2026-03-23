@@ -111,6 +111,7 @@ class Settings(BaseSettings):
     )
     socialwise_automation_base_url: str = "https://chatwit.com.br"
     socialwise_schedule_prefix: str = "socialwise:schedules"
+    leads_webhook_secret: str = Field(default="", validation_alias="LEADS_WEBHOOK_SECRET")
 
     # --- OAB eval agent feature flags ---
     oab_agent_local: bool = Field(default=False, validation_alias="OAB_AGENT_LOCAL")
